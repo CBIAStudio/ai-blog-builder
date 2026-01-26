@@ -32,6 +32,10 @@ if (!function_exists('cbia_yoast_log_key')) {
 
 if (!function_exists('cbia_yoast_log')) {
 	function cbia_yoast_log($msg) {
+		if (function_exists('cbia_log')) {
+			cbia_log('[YOAST] ' . (string)$msg, 'INFO');
+			return;
+		}
 		$log = (string)get_option(cbia_yoast_log_key(), '');
 		$ts  = current_time('mysql');
 		$log .= "[{$ts}] {$msg}\n";
@@ -45,11 +49,23 @@ if (!function_exists('cbia_yoast_log')) {
 }
 
 if (!function_exists('cbia_yoast_log_get')) {
-	function cbia_yoast_log_get() { return (string)get_option(cbia_yoast_log_key(), ''); }
+	function cbia_yoast_log_get() {
+		if (function_exists('cbia_get_log')) {
+			$payload = cbia_get_log();
+			return is_array($payload) ? (string)($payload['log'] ?? '') : (string)$payload;
+		}
+		return (string)get_option(cbia_yoast_log_key(), '');
+	}
 }
 
 if (!function_exists('cbia_yoast_log_clear')) {
-	function cbia_yoast_log_clear() { delete_option(cbia_yoast_log_key()); }
+	function cbia_yoast_log_clear() {
+		if (function_exists('cbia_clear_log')) {
+			cbia_clear_log();
+			return;
+		}
+		delete_option(cbia_yoast_log_key());
+	}
 }
 
 /* =========================================================
@@ -639,6 +655,10 @@ if (!function_exists('cbia_render_tab_yoast')) {
 // Si en algún punto quieres refresco tipo "log en vivo" por JS, puedes usar este endpoint:
 add_action('wp_ajax_cbia_get_yoast_log', function () {
 	if (!current_user_can('manage_options')) wp_send_json_error('forbidden', 403);
+	nocache_headers();
+	if (function_exists('cbia_get_log')) {
+		wp_send_json_success(cbia_get_log());
+	}
 	wp_send_json_success(cbia_yoast_log_get());
 });
 

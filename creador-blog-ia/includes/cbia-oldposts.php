@@ -35,6 +35,10 @@ if (!function_exists('cbia_oldposts_log_key')) {
 }
 if (!function_exists('cbia_oldposts_log_message')) {
     function cbia_oldposts_log_message($message) {
+        if (function_exists('cbia_log')) {
+            cbia_log('[OLDPOSTS] ' . (string)$message, 'INFO');
+            return;
+        }
         $log = get_option(cbia_oldposts_log_key(), '');
         $ts  = current_time('mysql');
         $log .= "[{$ts}] {$message}\n";
@@ -43,10 +47,22 @@ if (!function_exists('cbia_oldposts_log_message')) {
     }
 }
 if (!function_exists('cbia_oldposts_clear_log')) {
-    function cbia_oldposts_clear_log() { delete_option(cbia_oldposts_log_key()); }
+    function cbia_oldposts_clear_log() {
+        if (function_exists('cbia_clear_log')) {
+            cbia_clear_log();
+            return;
+        }
+        delete_option(cbia_oldposts_log_key());
+    }
 }
 if (!function_exists('cbia_oldposts_get_log')) {
-    function cbia_oldposts_get_log() { return (string)get_option(cbia_oldposts_log_key(), ''); }
+    function cbia_oldposts_get_log() {
+        if (function_exists('cbia_get_log')) {
+            $payload = cbia_get_log();
+            return is_array($payload) ? (string)($payload['log'] ?? '') : (string)$payload;
+        }
+        return (string)get_option(cbia_oldposts_log_key(), '');
+    }
 }
 
 /* =========================================================
@@ -916,6 +932,10 @@ if (!function_exists('cbia_oldposts_run_batch_v3')) {
    ========================================================= */
 add_action('wp_ajax_cbia_get_oldposts_log', function () {
     if (!current_user_can('manage_options')) wp_send_json_error('forbidden', 403);
+    nocache_headers();
+    if (function_exists('cbia_get_log')) {
+        wp_send_json_success(cbia_get_log());
+    }
     wp_send_json_success(cbia_oldposts_get_log());
 });
 
@@ -1550,7 +1570,11 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                         .then(r => r.json())
                         .then(data => {
                             if(data && data.success && logBox){
-                                logBox.value = data.data || '';
+                                if (data.data && typeof data.data === 'object' && data.data.log) {
+                                    logBox.value = data.data.log || '';
+                                } else {
+                                    logBox.value = data.data || '';
+                                }
                                 logBox.scrollTop = logBox.scrollHeight;
                             }
                         })

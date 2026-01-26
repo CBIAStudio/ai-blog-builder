@@ -3,6 +3,7 @@
  * Plugin Name: Creador Blog IA
  * Description: Genera entradas con IA (texto + marcadores de imágenes), programa con intervalos, asigna categorías/etiquetas, guarda tokens/usage y estima costes. Incluye actualización de posts antiguos y módulo Yoast.
  * Version: 9.0.0
+ * 
  * Author: Angel
  * Requires at least: 6.0
  * Requires PHP: 7.4
@@ -17,6 +18,7 @@ if (!defined('CBIA_PLUGIN_URL')) define('CBIA_PLUGIN_URL', plugin_dir_url(__FILE
 if (!defined('CBIA_INCLUDES_DIR')) define('CBIA_INCLUDES_DIR', CBIA_PLUGIN_DIR . 'includes/');
 if (!defined('CBIA_OPTION_SETTINGS')) define('CBIA_OPTION_SETTINGS', 'cbia_settings');
 if (!defined('CBIA_OPTION_LOG')) define('CBIA_OPTION_LOG', 'cbia_activity_log');
+if (!defined('CBIA_OPTION_LOG_COUNTER')) define('CBIA_OPTION_LOG_COUNTER', 'cbia_log_counter');
 if (!defined('CBIA_OPTION_STOP')) define('CBIA_OPTION_STOP', 'cbia_stop_generation');
 if (!defined('CBIA_OPTION_CHECKPOINT')) define('CBIA_OPTION_CHECKPOINT', 'cbia_checkpoint');
 
@@ -54,12 +56,29 @@ if (!function_exists('cbia_log')) {
 		}
 
 		update_option(CBIA_OPTION_LOG, $log, false);
+
+		$cnt = (int) get_option(CBIA_OPTION_LOG_COUNTER, 0);
+		update_option(CBIA_OPTION_LOG_COUNTER, $cnt + 1, false);
+
+		wp_cache_delete(CBIA_OPTION_LOG, 'options');
+		wp_cache_delete(CBIA_OPTION_LOG_COUNTER, 'options');
 	}
 }
 
 if (!function_exists('cbia_clear_log')) {
 	function cbia_clear_log(): void {
 		update_option(CBIA_OPTION_LOG, '', false);
+		update_option(CBIA_OPTION_LOG_COUNTER, 0, false);
+		wp_cache_delete(CBIA_OPTION_LOG, 'options');
+		wp_cache_delete(CBIA_OPTION_LOG_COUNTER, 'options');
+	}
+}
+
+if (!function_exists('cbia_get_log')) {
+	function cbia_get_log(): array {
+		$log = (string) get_option(CBIA_OPTION_LOG, '');
+		$counter = (int) get_option(CBIA_OPTION_LOG_COUNTER, 0);
+		return ['log' => $log, 'counter' => $counter];
 	}
 }
 
@@ -94,6 +113,8 @@ if (!function_exists('cbia_get_default_settings')) {
 			'prompt_img_body'       => '',
 			'prompt_img_conclusion' => '',
 			'prompt_img_faq'        => '',
+			'post_language'         => 'español',
+			'faq_heading_custom'    => '',
 
 			// Categorías/Tags
 			'default_category'      => 'Noticias',
@@ -141,6 +162,9 @@ register_activation_hook(__FILE__, function () {
 	if (get_option(CBIA_OPTION_LOG, null) === null) {
 		update_option(CBIA_OPTION_LOG, '', false);
 	}
+	if (get_option(CBIA_OPTION_LOG_COUNTER, null) === null) {
+		update_option(CBIA_OPTION_LOG_COUNTER, 0, false);
+	}
 	if (get_option(CBIA_OPTION_STOP, null) === null) {
 		update_option(CBIA_OPTION_STOP, 0, false);
 	}
@@ -183,6 +207,54 @@ add_action('admin_menu', function () {
 		'dashicons-edit-page',
 		56
 	);
+});
+
+/**
+ * Aviso Yoast SEO (solo en la pantalla del plugin)
+ */
+add_action('admin_notices', function () {
+	if (!is_admin() || !current_user_can('manage_options')) return;
+	if (!function_exists('get_current_screen')) return;
+
+	$screen = get_current_screen();
+	if (!$screen || $screen->id !== 'toplevel_page_cbia') return;
+
+	include_once ABSPATH . 'wp-admin/includes/plugin.php';
+
+	$yoast_plugin = 'wordpress-seo/wp-seo.php';
+	$yoast_path = WP_PLUGIN_DIR . '/wordpress-seo/wp-seo.php';
+	$installed = file_exists($yoast_path);
+
+	if (is_plugin_active($yoast_plugin)) {
+		echo '<div class="notice notice-success is-dismissible"><p>Yoast SEO detectado y activo.</p></div>';
+		return;
+	}
+
+	if ($installed) {
+		if (current_user_can('activate_plugins')) {
+			$activate_url = wp_nonce_url(
+				self_admin_url('plugins.php?action=activate&plugin=' . rawurlencode($yoast_plugin)),
+				'activate-plugin_' . $yoast_plugin
+			);
+			$msg = 'Yoast SEO est&aacute; instalado pero inactivo. <a href="' . esc_url($activate_url) . '">Activar ahora</a>.';
+		} else {
+			$msg = 'Yoast SEO est&aacute; instalado pero inactivo.';
+		}
+		echo '<div class="notice notice-warning is-dismissible"><p>' . wp_kses($msg, ['a' => ['href' => []]]) . '</p></div>';
+		return;
+	}
+
+	if (current_user_can('install_plugins')) {
+		$install_url = wp_nonce_url(
+			self_admin_url('update.php?action=install-plugin&plugin=wordpress-seo'),
+			'install-plugin_wordpress-seo'
+		);
+		$msg = 'Yoast SEO no est&aacute; instalado. <a href="' . esc_url($install_url) . '">Instalar Yoast SEO</a>.';
+	} else {
+		$msg = 'Yoast SEO no est&aacute; instalado.';
+	}
+
+	echo '<div class="notice notice-warning is-dismissible"><p>' . wp_kses($msg, ['a' => ['href' => []]]) . '</p></div>';
 });
 
 if (!function_exists('cbia_get_admin_tabs')) {
@@ -284,13 +356,16 @@ JS;
 	wp_add_inline_script('jquery', $js, 'after');
 });
 
-add_action('wp_ajax_cbia_get_log', function () {
-	check_ajax_referer('cbia_ajax_nonce');
-	if (!current_user_can('manage_options')) wp_send_json_error(['msg' => 'No autorizado'], 403);
+if (!has_action('wp_ajax_cbia_get_log')) {
+	add_action('wp_ajax_cbia_get_log', function () {
+		check_ajax_referer('cbia_ajax_nonce');
+		if (!current_user_can('manage_options')) wp_send_json_error(['msg' => 'No autorizado'], 403);
 
-	$log = (string) get_option(CBIA_OPTION_LOG, '');
-	wp_send_json_success(['log' => $log]);
-});
+		nocache_headers();
+		$payload = cbia_get_log();
+		wp_send_json_success($payload);
+	});
+}
 
 add_action('wp_ajax_cbia_clear_log', function () {
 	check_ajax_referer('cbia_ajax_nonce');

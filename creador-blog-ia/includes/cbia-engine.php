@@ -1,5 +1,44 @@
 <?php
+/*
+ * includes/cbia-engine.php
+ * MOTOR REAL:
+ * - Llama a OpenAI /v1/responses
+ * - Captura usage (tokens)
+ * - Genera post (publish/future)
+ */
 if (!defined('ABSPATH')) exit;
+
+
+// Añadir la función cbia_force_insert_markers en el lugar correcto
+if (!function_exists('cbia_force_insert_markers')) {
+    function cbia_force_insert_markers($html, $title, $internal_limit) {
+        $markers_actuales = 0;
+        if (preg_match_all('/\[IMAGEN\s*:[^\]]+\]/i', $html, $mm)) {
+            $markers_actuales = count($mm[0]);
+        }
+        $faltan = $internal_limit - $markers_actuales;
+        if ($faltan <= 0) return $html;
+        $inserted = 0;
+        // Intro
+        if ($inserted < $faltan && preg_match('/<p[^>]*>.*?<\/p>/is', $html, $m, PREG_OFFSET_CAPTURE)) {
+            $p_full = $m[0][0]; $p_len = strlen($p_full); $pos0 = $m[0][1];
+            $desc = preg_replace('/\s+/', ' ', strip_tags($p_full));
+            $marker = "\n[IMAGEN: {$desc}]\n"; $html = substr($html, 0, $pos0 + $p_len) . $marker . substr($html, $pos0 + $p_len); $inserted++;
+        }
+        // FAQ
+        $faq_pos = preg_match('/<h2[^>]*>.*?(preguntas\s+frecuentes|faq).*?<\/h2>/i', $html, $mm2, PREG_OFFSET_CAPTURE) ? $mm2[0][1] : -1;
+        if ($inserted < $faltan && $faq_pos >= 0) {
+            $marker = "\n[IMAGEN: soporte visual para las preguntas frecuentes]\n";
+            $html = substr($html, 0, $faq_pos) . $marker . substr($html, $faq_pos); $inserted++;
+        }
+        // Solo si aún faltan, añade uno al final
+        if ($inserted < $faltan) {
+            $desc = "cierre visual coherente con el tema de '{$title}'";
+            $marker = "\n[IMAGEN: {$desc}]\n"; $html .= $marker; $inserted++;
+        }
+        return $html;
+    }
+}
 
 /**
  * includes/cbia-engine.php
@@ -19,7 +58,6 @@ if (!defined('ABSPATH')) exit;
  * - Endpoint AJAX wp_ajax_cbia_get_log (JSON) con nocache_headers()
  * - cbia_clear_log() borra también contador
  */
-
 
 
 /* =========================================================
@@ -98,6 +136,7 @@ if (!function_exists('cbia_clear_log')) {
  */
 if (!function_exists('cbia_register_ajax_log_endpoint')) {
 	function cbia_register_ajax_log_endpoint() {
+		if (has_action('wp_ajax_cbia_get_log')) return;
 		add_action('wp_ajax_cbia_get_log', function () {
 			if (!current_user_can('manage_options')) {
 				wp_send_json_error('No autorizado');
@@ -127,6 +166,18 @@ if (!function_exists('cbia_set_stop_flag')) {
 if (!function_exists('cbia_is_stop_requested')) {
 	function cbia_is_stop_requested() {
 		return (int) get_option('cbia_stop_generation', 0) === 1;
+	}
+}
+
+if (!function_exists('cbia_try_unlimited_runtime')) {
+	function cbia_try_unlimited_runtime() {
+		// Evita que el proceso se corte por límite de ejecución cuando haces lotes largos desde admin.
+		if (function_exists('set_time_limit')) {
+			@set_time_limit(0);
+		}
+		if (function_exists('ignore_user_abort')) {
+			@ignore_user_abort(true);
+		}
 	}
 }
 
@@ -160,7 +211,6 @@ if (!function_exists('cbia_model_fallback_chain')) {
 			'gpt-4.1-mini',
 			'gpt-4.1',
 			'gpt-4.1-nano',
-			'gpt-4o-mini',
 		];
 
 		$preferred = trim((string)$preferred);
@@ -215,23 +265,35 @@ if (!function_exists('cbia_pick_model')) {
 if (!function_exists('cbia_build_prompt_for_title')) {
 	function cbia_build_prompt_for_title($title) {
 		$s = cbia_get_settings();
+		$idioma_post = trim((string)($s['post_language'] ?? 'español'));
 
 		$prompt_unico = $s['prompt_single_all'] ?? '';
 		$prompt_unico = is_string($prompt_unico) ? trim($prompt_unico) : '';
 
 		if ($prompt_unico === '') {
 			$prompt_unico =
-				"Escribe un POST COMPLETO en HTML para \"{title}\", optimizado para Google Discover, con una extensión aproximada de 1600–1800 palabras (±10%)."
-				."\nEl contenido debe priorizar interés humano, lectura fluida, contexto cultural y experiencia real. Evita el enfoque de SEO tradicional y no fuerces keywords exactas."
-				."\nTono profesional, cercano y natural. Estilo editorial y cultural, no enciclopédico. Narrativo cuando sea adecuado, con criterio y punto de vista. Pensado para lectores que no estaban buscando activamente el tema."
-				."\nLa estructura debe ser EXACTA. No añadas ni elimines secciones:"
-				."\n- Párrafo inicial en <p> sin usar la palabra \"Introducción\" (150–180 palabras). Debe enganchar desde la primera frase."
-				."\n- 3 bloques principales con <h2> y, SOLO si aporta claridad real, <h3> (200–300 palabras por bloque; usa listas <ul><li>…</li></ul> únicamente cuando ayuden a la comprensión)."
-				."\n- Sección <h2>Preguntas frecuentes</h2> con 6 FAQs en el formato exacto <h3>Pregunta</h3><p>Respuesta</p> (100–130 palabras por respuesta)."
-				."\nINSTRUCCIÓN CRÍTICA: ninguna respuesta debe cortarse y TODAS las respuestas deben terminar en punto final."
+				"Escribe un POST COMPLETO en {IDIOMA_POST} y en HTML para \"{title}\", optimizado para Google Discover, con una extensión aproximada de 1600–1800 palabras (±10%)."
+				."\n\nREGLA DE IDIOMA (OBLIGATORIA)"
+				."\n- TODO el contenido debe estar escrito EXCLUSIVAMENTE en {IDIOMA_POST}."
+				."\n- Esto incluye encabezados, preguntas frecuentes y respuestas."
+				."\n- Está PROHIBIDO usar cualquier otro idioma en el contenido (salvo el título {title} si viene en otro idioma)."
+				."\n\nEl contenido debe priorizar interés humano, lectura fluida, contexto cultural y experiencia real. Evita el enfoque de SEO tradicional y no fuerces keywords exactas."
+				."\n\nTONO Y ESTILO"
+				."\n- Profesional, cercano y natural."
+				."\n- Editorial y cultural, no enciclopédico."
+				."\n- Narrativo cuando sea adecuado, con criterio y punto de vista."
+				."\n- Pensado para lectores que no estaban buscando activamente el tema."
+				."\n\nLa estructura debe ser EXACTA. No añadas ni elimines secciones:"
+				."\n- Párrafo inicial en <p> (180–220 palabras). NO usar la palabra \"Introducción\" ni equivalentes."
+				."\n- 3 bloques principales con <h2> y, SOLO si aporta claridad real, <h3> (250–300 palabras por bloque; usa listas <ul><li>…</li></ul> únicamente cuando ayuden a la comprensión)."
+				."\n- Sección de preguntas frecuentes:"
+				."\n  • Un <h2> cuyo texto debe estar en {IDIOMA_POST} y ser el equivalente natural a \"Preguntas frecuentes\" en ese idioma."
+				."\n  • 6 FAQs en el formato exacto <h3>Pregunta</h3><p>Respuesta</p> (120–150 palabras por respuesta)."
+				."\n\nINSTRUCCIÓN CRÍTICA: ninguna respuesta debe cortarse y TODAS las respuestas deben terminar en punto final."
+				."\n\nIMÁGENES"
 				."\nInserta marcadores de imagen SOLO donde aporten valor usando el formato EXACTO:"
 				."\n[IMAGEN: descripción breve, concreta, sin texto ni marcas de agua, estilo realista/editorial]"
-				."\nReglas de obligado cumplimiento:"
+				."\n\nReglas de obligado cumplimiento:"
 				."\n• NO usar <h1>."
 				."\n• NO añadir sección de conclusión ni CTA final."
 				."\n• NO incluir <!DOCTYPE>, <html>, <head>, <body>, <script>, <style>, <iframe>, <table> ni <blockquote>."
@@ -241,16 +303,7 @@ if (!function_exists('cbia_build_prompt_for_title')) {
 		}
 
 		$prompt_unico = str_replace('{title}', $title, $prompt_unico);
-
-		// Variante de longitud (fallback suave)
-		$variant = (string)($s['post_length_variant'] ?? 'medium');
-		if ($variant === 'short') {
-			$prompt_unico .= "\n\nAjuste de longitud: mantén aproximadamente 1000 palabras (±10%).";
-		} elseif ($variant === 'long') {
-			$prompt_unico .= "\n\nAjuste de longitud: amplía a aproximadamente 2200 palabras (±10%).";
-		} else {
-			$prompt_unico .= "\n\nAjuste de longitud: mantén aproximadamente 1600–1800 palabras (±10%).";
-		}
+		$prompt_unico = str_replace('{IDIOMA_POST}', $idioma_post, $prompt_unico);
 
 		return $prompt_unico;
 	}
@@ -264,32 +317,128 @@ if (!function_exists('cbia_extract_text_from_responses_payload')) {
 	function cbia_extract_text_from_responses_payload($data) {
 		if (!is_array($data)) return '';
 
-		if (!empty($data['output_text']) && is_string($data['output_text'])) {
-			return trim($data['output_text']);
-		}
-
-		// output[].content[].text
-		if (!empty($data['output'][0]['content']) && is_array($data['output'][0]['content'])) {
-			$parts = [];
-			foreach ($data['output'][0]['content'] as $seg) {
-				if (is_array($seg) && isset($seg['text'])) {
-					if (is_string($seg['text'])) $parts[] = $seg['text'];
-					elseif (is_array($seg['text']) && !empty($seg['text']['value'])) $parts[] = $seg['text']['value'];
-				} elseif (is_string($seg)) {
-					$parts[] = $seg;
-				}
-			}
-			$txt = trim(implode("\n", $parts));
+		// 1) Campo directo (algunos modelos lo incluyen)
+		if (isset($data['output_text']) && is_string($data['output_text'])) {
+			$txt = trim($data['output_text']);
 			if ($txt !== '') return $txt;
 		}
 
-		// fallback legacy
-		if (!empty($data['choices'][0]['message']['content'])) {
-			$c = $data['choices'][0]['message']['content'];
-			if (is_string($c)) return trim($c);
+		$parts = array();
+
+		// 2) Estructura habitual Responses: output[] -> content[]
+		if (!empty($data['output']) && is_array($data['output'])) {
+			foreach ($data['output'] as $out) {
+				if (!is_array($out)) continue;
+
+				// Algunos payloads traen texto directo
+				if (isset($out['output_text']) && is_string($out['output_text'])) {
+					$ot = trim($out['output_text']);
+					if ($ot !== '') $parts[] = $ot;
+				}
+
+				if (!empty($out['content']) && is_array($out['content'])) {
+					foreach ($out['content'] as $seg) {
+						if (is_string($seg)) {
+							$st = trim($seg);
+							if ($st !== '') $parts[] = $st;
+							continue;
+						}
+						if (!is_array($seg)) continue;
+
+						// Variantes típicas:
+						// - {type:"output_text", text:"..."}
+						// - {type:"output_text", text:{value:"..."}}
+						// - {type:"message", content:[{type:"output_text", text:"..."}]}
+						if (isset($seg['text'])) {
+							if (is_string($seg['text'])) {
+								$st = trim($seg['text']);
+								if ($st !== '') $parts[] = $st;
+							} elseif (is_array($seg['text']) && isset($seg['text']['value']) && is_string($seg['text']['value'])) {
+								$st = trim($seg['text']['value']);
+								if ($st !== '') $parts[] = $st;
+							}
+						}
+
+						if (!empty($seg['content']) && is_array($seg['content'])) {
+							foreach ($seg['content'] as $seg2) {
+								if (is_string($seg2)) {
+									$st = trim($seg2);
+									if ($st !== '') $parts[] = $st;
+									continue;
+								}
+								if (!is_array($seg2)) continue;
+								if (isset($seg2['text'])) {
+									if (is_string($seg2['text'])) {
+										$st = trim($seg2['text']);
+										if ($st !== '') $parts[] = $st;
+									} elseif (is_array($seg2['text']) && isset($seg2['text']['value']) && is_string($seg2['text']['value'])) {
+										$st = trim($seg2['text']['value']);
+										if ($st !== '') $parts[] = $st;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 
-		return '';
+		$txt = trim(implode("\n", array_filter(array_map('trim', $parts))));
+		if ($txt !== '') return $txt;
+
+		// 3) Fallback legacy (Chat Completions-style)
+		if (!empty($data['choices'][0]['message']['content'])) {
+			$c = $data['choices'][0]['message']['content'];
+			if (is_string($c)) {
+				$c = trim($c);
+				if ($c !== '') return $c;
+			}
+		}
+
+		// 4) Último recurso: búsqueda recursiva de strings con claves típicas
+		$acc = array();
+		$max_depth = 6;
+		$max_chars = 20000;
+
+		$walker = function($node, $depth) use (&$walker, &$acc, $max_depth, $max_chars) {
+			if ($depth > $max_depth) return;
+			if (count($acc) > 200) return;
+
+			if (is_string($node)) {
+				$st = trim($node);
+				if ($st !== '') $acc[] = $st;
+				return;
+			}
+
+			if (!is_array($node)) return;
+
+			foreach ($node as $k => $v) {
+				$kk = is_string($k) ? strtolower($k) : '';
+				if ($kk === 'output_text' || $kk === 'text' || $kk === 'content' || $kk === 'value') {
+					if (is_string($v)) {
+						$st = trim($v);
+						if ($st !== '') $acc[] = $st;
+						continue;
+					}
+					if (is_array($v) && isset($v['value']) && is_string($v['value'])) {
+						$st = trim($v['value']);
+						if ($st !== '') $acc[] = $st;
+						continue;
+					}
+				}
+
+				$walker($v, $depth + 1);
+
+				// evita acumular demasiado
+				$joined = implode("\n", $acc);
+				if (strlen($joined) > $max_chars) return;
+			}
+		};
+
+		$walker($data, 0);
+
+		$txt = trim(implode("\n", array_filter(array_map('trim', $acc))));
+		return $txt;
 	}
 }
 
@@ -316,6 +465,129 @@ if (!function_exists('cbia_usage_from_responses_payload')) {
 }
 
 /* =========================================================
+   ================== USAGE: ACUMULACIÓN ====================
+   ========================================================= */
+
+if (!function_exists('cbia_usage_empty')) {
+	function cbia_usage_empty() {
+		return ['input_tokens' => 0, 'output_tokens' => 0, 'total_tokens' => 0];
+	}
+}
+
+if (!function_exists('cbia_usage_normalize')) {
+	function cbia_usage_normalize($usage) {
+		$u = cbia_usage_empty();
+		if (is_array($usage)) {
+			$u['input_tokens']  = (int)($usage['input_tokens'] ?? 0);
+			$u['output_tokens'] = (int)($usage['output_tokens'] ?? 0);
+			$u['total_tokens']  = (int)($usage['total_tokens'] ?? 0);
+		}
+		if ($u['total_tokens'] <= 0) $u['total_tokens'] = $u['input_tokens'] + $u['output_tokens'];
+		return $u;
+	}
+}
+
+/**
+ * Guarda cada llamada (texto) para poder calcular coste real luego.
+ * - Meta: _cbia_usage_calls (JSON)
+ * - Agregados: _cbia_tokens_input_sum / _cbia_tokens_output_sum / _cbia_tokens_total_sum
+ */
+if (!function_exists('cbia_usage_append_call')) {
+	function cbia_usage_append_call($post_id, $context, $model, $usage, $extra = array()) {
+		$post_id = (int)$post_id;
+		if ($post_id <= 0) return false;
+
+		$u = cbia_usage_normalize($usage);
+
+		$ctx = sanitize_key((string)$context);
+		$mdl = sanitize_text_field((string)$model);
+
+		$raw = get_post_meta($post_id, '_cbia_usage_calls', true);
+		$list = array();
+		if ($raw) {
+			$tmp = json_decode((string)$raw, true);
+			if (is_array($tmp)) $list = $tmp;
+		}
+
+		$item = array_merge(array(
+			'ts'           => current_time('mysql'),
+			'context'      => $ctx,
+			'model'        => $mdl,
+			'input_tokens' => (int)$u['input_tokens'],
+			'output_tokens'=> (int)$u['output_tokens'],
+			'total_tokens' => (int)$u['total_tokens'],
+		), is_array($extra) ? $extra : array());
+
+		$list[] = $item;
+
+		// Mantener tamaño razonable
+		if (count($list) > 200) $list = array_slice($list, -200);
+
+		update_post_meta($post_id, '_cbia_usage_calls', wp_json_encode($list));
+
+		// Agregados globales
+		$in_sum  = (int)get_post_meta($post_id, '_cbia_tokens_input_sum', true);
+		$out_sum = (int)get_post_meta($post_id, '_cbia_tokens_output_sum', true);
+		$tot_sum = (int)get_post_meta($post_id, '_cbia_tokens_total_sum', true);
+
+		$in_sum  += (int)$u['input_tokens'];
+		$out_sum += (int)$u['output_tokens'];
+		$tot_sum += (int)$u['total_tokens'];
+
+		update_post_meta($post_id, '_cbia_tokens_input_sum', (string)$in_sum);
+		update_post_meta($post_id, '_cbia_tokens_output_sum', (string)$out_sum);
+		update_post_meta($post_id, '_cbia_tokens_total_sum', (string)$tot_sum);
+
+		return true;
+	}
+}
+
+/**
+ * Guarda llamadas a imágenes (para coste por imagen y trazabilidad).
+ * - Meta: _cbia_image_calls (JSON)
+ * - Agregados: _cbia_images_total / _cbia_images_ok / _cbia_images_fail
+ */
+if (!function_exists('cbia_image_append_call')) {
+	function cbia_image_append_call($post_id, $section, $model, $ok, $attach_id = 0, $err = '') {
+		$post_id = (int)$post_id;
+		if ($post_id <= 0) return false;
+
+		$raw = get_post_meta($post_id, '_cbia_image_calls', true);
+		$list = array();
+		if ($raw) {
+			$tmp = json_decode((string)$raw, true);
+			if (is_array($tmp)) $list = $tmp;
+		}
+
+		$list[] = array(
+			'ts'        => current_time('mysql'),
+			'section'   => sanitize_key((string)$section),
+			'model'     => sanitize_text_field((string)$model),
+			'ok'        => $ok ? 1 : 0,
+			'attach_id' => (int)$attach_id,
+			'error'     => sanitize_text_field((string)$err),
+		);
+
+		if (count($list) > 200) $list = array_slice($list, -200);
+
+		update_post_meta($post_id, '_cbia_image_calls', wp_json_encode($list));
+
+		$total = (int)get_post_meta($post_id, '_cbia_images_total', true);
+		$okc   = (int)get_post_meta($post_id, '_cbia_images_ok', true);
+		$fail  = (int)get_post_meta($post_id, '_cbia_images_fail', true);
+
+		$total++;
+		if ($ok) $okc++; else $fail++;
+
+		update_post_meta($post_id, '_cbia_images_total', (string)$total);
+		update_post_meta($post_id, '_cbia_images_ok', (string)$okc);
+		update_post_meta($post_id, '_cbia_images_fail', (string)$fail);
+
+		return true;
+	}
+}
+
+/* =========================================================
    =============== OPENAI: RESPONSES CALL (6) ===============
    ========================================================= */
 
@@ -325,6 +597,7 @@ if (!function_exists('cbia_openai_responses_call')) {
 	 * [ok(bool), text(string), usage(array), model_used(string), err(string), raw(array|string)]
 	 */
 	function cbia_openai_responses_call($prompt, $title_for_log = '', $tries = 2) {
+		cbia_try_unlimited_runtime();
 		$api_key = cbia_openai_api_key();
 		if (!$api_key) {
 			return [false, '', ['input_tokens'=>0,'output_tokens'=>0,'total_tokens'=>0], '', 'No hay API key', []];
@@ -357,7 +630,7 @@ if (!function_exists('cbia_openai_responses_call')) {
 					'model' => $model,
 					'input' => $input,
 					// Max output prudente (luego el prompt manda)
-					'max_output_tokens' => 2400,
+					'max_output_tokens' => (int)($s['responses_max_output_tokens'] ?? 4000),
 				];
 
 				$resp = wp_remote_post('https://api.openai.com/v1/responses', [
@@ -666,12 +939,146 @@ if (!function_exists('cbia_replace_first_occurrence')) {
 }
 
 /* =========================================================
+   ================ HELPERS: CLEANUP TEXTO =================
+   ========================================================= */
+if (!function_exists('cbia_remove_marker_ex')) {
+	function cbia_remove_marker_ex(&$html, $marker_text) {
+		$m = preg_quote((string)$marker_text, '/');
+		// Elimina marcador + espacios + punto opcional
+		$pattern = '/\s*' . $m . '\s*\.?\s*/u';
+		$html = preg_replace($pattern, "\n", (string)$html, 1);
+	}
+}
+
+if (!function_exists('cbia_cleanup_post_html')) {
+	function cbia_cleanup_post_html(&$html) {
+		$h = (string)$html;
+		// 1) Quitar spans vacíos de pendientes
+		$h = preg_replace('/\s*<span[^>]*class=("|\')cbia-img-pendiente\1[^>]*>\s*<\/span>\s*/iu', "\n", $h);
+		// 2) Quitar punto huérfano justo después del span pendiente: </span>.
+		$h = preg_replace('/(<\/span>)\s*\.\s*/iu', '$1', $h);
+		// 3) Quitar punto en la línea siguiente si viene tras </span>\n.
+		$h = preg_replace('/<\/span>\s*(\r?\n)\s*\.\s*(\r?\n|$)/iu', "</span>$1", $h);
+			// 3.1) Quitar punto suelto justo después de cierres de bloque: </p>., </h2>. etc.
+			$h = preg_replace('/(<\/(p|h2|h3|ul|ol|li|div|section|article|figure)>)\s*\.\s*(?=$|\r?\n)/iu', '$1', $h);
+		// 4) Quitar líneas que solo contienen un punto
+		$h = preg_replace('/(^|\r?\n)[ \t]*\.[ \t]*(?=\r?\n|$)/mu', "$1", $h);
+		// 5) Colapsar 3+ saltos a 2
+		$h = preg_replace('/(\r?\n){3,}/', "\n\n", $h);
+		$html = trim($h);
+	}
+}
+
+if (!function_exists('cbia_fix_bracket_headings')) {
+	function cbia_fix_bracket_headings($html) {
+		$h = (string)$html;
+		// Patrón con cierre correspondiente
+		$h = preg_replace('/\[(h2|h3)\](.*?)\[\/\1\]/is', '<$1>$2</$1>', $h);
+		// Fallback sueltos
+		$h = str_replace(array('[h2]','[/h2]','[h3]','[/h3]'), array('<h2>','</h2>','<h3>','</h3>'), $h);
+		return $h;
+	}
+}
+
+if (!function_exists('cbia_normalize_faq_heading')) {
+	function cbia_normalize_faq_heading($html) {
+		$s = function_exists('cbia_get_settings') ? cbia_get_settings() : array();
+		$lang = trim((string)($s['post_language'] ?? 'español'));
+		$custom = trim((string)($s['faq_heading_custom'] ?? ''));
+
+		$target = $custom;
+		if ($target === '') {
+			$map = array(
+				'español'   => 'Preguntas frecuentes',
+				'portugués' => 'Perguntas frequentes',
+				'inglés'    => 'Frequently Asked Questions',
+				'francés'   => 'Questions fréquentes',
+				'italiano'  => 'Domande frequenti',
+				'alemán'    => 'Häufig gestellte Fragen',
+			);
+			$target = $map[$lang] ?? 'Preguntas frecuentes';
+		}
+
+		$pattern = '/<h2\b[^>]*>\s*(preguntas\s+frecuentes|faq|frequently\s+asked\s+questions|perguntas\s+frequentes|questions\s+fréquentes|domande\s+frequenti|häufig\s+gestellte\s+fragen)\s*<\/h2>/iu';
+		$replacement = '<h2>' . esc_html($target) . '</h2>';
+
+		$new = preg_replace($pattern, $replacement, (string)$html, 1);
+		return $new !== null ? $new : $html;
+	}
+}
+
+/* =========================================================
    =================== OPENAI: IMÁGENES =====================
    ========================================================= */
 
 if (!function_exists('cbia_image_model_chain')) {
 	function cbia_image_model_chain() {
 		return ['gpt-image-1-mini', 'gpt-image-1'];
+	}
+}
+
+/**
+ * Catálogo (para UI y coherencia v8.4)
+ */
+if (!function_exists('cbia_image_formats_catalog')) {
+	function cbia_image_formats_catalog(): array {
+		return [
+			'panoramic_1536x1024' => [
+				'label' => 'Panorámica (1536x1024)',
+				'size'  => '1536x1024',
+				'type'  => 'panoramic',
+			],
+			'banner_1536x1024' => [
+				'label' => 'Banner (1536x1024, encuadre amplio + headroom 25–35%)',
+				'size'  => '1536x1024',
+				'type'  => 'banner',
+			],
+		];
+	}
+}
+
+if (!function_exists('cbia_get_image_format_for_section')) {
+	/**
+	 * IMPORTANTE (como en v8.4):
+	 * - destacada/intro => panorámica
+	 * - resto => banner
+	 * Aunque haya settings guardados, aquí se fuerza por compatibilidad.
+	 */
+	function cbia_get_image_format_for_section($section): string {
+		$section = sanitize_key((string)$section);
+		return ($section === 'intro') ? 'panoramic_1536x1024' : 'banner_1536x1024';
+	}
+}
+
+if (!function_exists('cbia_is_banner_format')) {
+	function cbia_is_banner_format($format_key): bool {
+		$catalog = cbia_image_formats_catalog();
+		if (!isset($catalog[$format_key])) return false;
+		return (($catalog[$format_key]['type'] ?? '') === 'banner');
+	}
+}
+
+if (!function_exists('cbia_build_content_img_tag')) {
+	/**
+	 * Tag <img> en contenido:
+	 * - decoding="async"
+	 * - banner => class="cbia-banner lazyloaded" (como v8.4)
+	 */
+	function cbia_build_content_img_tag($url, $alt, $section): string {
+		$url = (string)$url;
+		$alt = (string)$alt;
+		$section = sanitize_key((string)$section);
+
+		$fmt = cbia_get_image_format_for_section($section);
+
+		$classes = [];
+		if (cbia_is_banner_format($fmt)) {
+			$classes[] = 'cbia-banner';
+			$classes[] = 'lazyloaded';
+		}
+
+		$class_attr = !empty($classes) ? ' class="' . esc_attr(implode(' ', $classes)) . '"' : '';
+		return '<img decoding="async" loading="lazy"' . $class_attr . ' src="' . esc_url($url) . '" alt="' . esc_attr($alt) . '" style="display:block;width:100%;height:auto;margin:15px 0;" />';
 	}
 }
 
@@ -686,8 +1093,9 @@ if (!function_exists('cbia_build_image_prompt')) {
 
 		$base = str_replace('{title}', $title, $base);
 
-		// Ajuste por sección: destacada panorámica, resto banner
-		if ($section !== 'intro') {
+		// Ajuste por formato (v8.4): intro panorámica, resto banner
+		$fmt = cbia_get_image_format_for_section($section);
+		if (cbia_is_banner_format($fmt)) {
 			$base = "Toma amplia (long shot), sujeto pequeño, headroom 25–35%, márgenes laterales generosos, sin primeros planos. " . $base;
 		}
 
@@ -703,9 +1111,10 @@ if (!function_exists('cbia_build_image_prompt')) {
 
 if (!function_exists('cbia_image_size_for_section')) {
 	function cbia_image_size_for_section($section) {
-		// Para simplificar (y coherente con tu plugin anterior): intro panorámica, resto banner
-		if ($section === 'intro') return '1536x1024';
-		return '1536x1024';
+		$fmt = cbia_get_image_format_for_section($section);
+		$catalog = cbia_image_formats_catalog();
+		if (!isset($catalog[$fmt])) return '1536x1024';
+		return (string)($catalog[$fmt]['size'] ?? '1536x1024');
 	}
 }
 
@@ -749,6 +1158,7 @@ if (!function_exists('cbia_generate_image_openai')) {
 	 * Retorna [ok(bool), attach_id(int), model_used(string), err(string)]
 	 */
 	function cbia_generate_image_openai($desc, $section, $title) {
+		cbia_try_unlimited_runtime();
 		$api_key = cbia_openai_api_key();
 		if (!$api_key) return [false, 0, '', 'No hay API key'];
 
@@ -938,6 +1348,7 @@ if (!function_exists('cbia_create_single_blog_post')) {
 	 * ['ok'=>bool,'post_id'=>int,'error'=>string]
 	 */
 	function cbia_create_single_blog_post($title, $post_date_mysql = '') {
+		cbia_try_unlimited_runtime();
 		$title = trim((string)$title);
 		if ($title === '') return ['ok'=>false,'post_id'=>0,'error'=>'Título vacío'];
 
@@ -955,11 +1366,20 @@ if (!function_exists('cbia_create_single_blog_post')) {
 		if ($images_limit < 1) $images_limit = 1;
 		if ($images_limit > 4) $images_limit = 4;
 
+		// Tracking para costes reales (texto + imágenes)
+		$image_calls = array();
+		$text_call = array();
+
 		// 1) Prompt
 		$prompt = cbia_build_prompt_for_title($title);
 
 		// 2) OpenAI texto (6 valores)
 		list($ok, $text_html, $usage, $model_used, $err, $raw) = cbia_openai_responses_call($prompt, $title, 2);
+		$text_call = array(
+			'context' => 'blog_text',
+			'model'   => (string)$model_used,
+			'usage'   => is_array($usage) ? $usage : cbia_usage_empty(),
+		);
 		if (!$ok) {
 			cbia_log("Fallo texto '{$title}': " . ($err ?: 'desconocido'), 'ERROR');
 			return ['ok'=>false,'post_id'=>0,'error'=>$err ?: 'Fallo texto'];
@@ -968,9 +1388,22 @@ if (!function_exists('cbia_create_single_blog_post')) {
 		$text_html = cbia_strip_document_wrappers($text_html);
 		$text_html = cbia_strip_h1_to_h2($text_html);
 
+		// Corrige encabezados escritos como [h2]...[/h2] / [h3]...[/h3] a HTML real
+		$text_html = cbia_fix_bracket_headings($text_html);
+		// Normaliza el título de FAQ según idioma/config
+		$text_html = cbia_normalize_faq_heading($text_html);
+
 		// 3) Procesar marcadores de imagen
+		$internal_limit = max(0, $images_limit - 1);
 		$markers = cbia_extract_image_markers($text_html);
-		if (!empty($markers)) $markers = array_slice($markers, 0, $images_limit);
+		if (!empty($markers)) $markers = array_slice($markers, 0, $internal_limit);
+
+		// Si hay menos marcadores que el límite interno, autoinserta los que falten
+		if (count($markers) < $internal_limit) {
+			$text_html = cbia_force_insert_markers($text_html, $title, $internal_limit);
+			$markers = cbia_extract_image_markers($text_html);
+			if (!empty($markers)) $markers = array_slice($markers, 0, $internal_limit);
+		}
 
 		$pending_list = [];
 		$featured_attach_id = 0;
@@ -986,22 +1419,31 @@ if (!function_exists('cbia_create_single_blog_post')) {
 
 			list($img_ok, $attach_id, $img_model, $img_err) = cbia_generate_image_openai($mk['desc'], $section, $title);
 
+			$image_calls[] = array(
+				'section'   => (string)$section,
+				'model'     => (string)$img_model,
+				'ok'        => $img_ok ? 1 : 0,
+				'attach_id' => (int)$attach_id,
+				'error'     => (string)($img_err ?: ''),
+			);
+
 			if ($img_ok && $attach_id) {
 				if ($is_first) {
 					$featured_attach_id = (int)$attach_id;
 					// Quitamos el marcador de la destacada (no insertamos dentro del contenido)
-					cbia_replace_first_occurrence($text_html, $mk['full'], '');
+					cbia_remove_marker_ex($text_html, $mk['full']);
 					cbia_log("Imagen destacada OK (attach_id={$attach_id}) '{$title}'", 'INFO');
 				} else {
 					$url = wp_get_attachment_url((int)$attach_id);
 					$alt = cbia_build_img_alt($title, $section, $mk['desc']);
-					$img_tag = "<img src=\"" . esc_url($url) . "\" alt=\"" . esc_attr($alt) . "\" style=\"display:block;width:100%;height:auto;margin:15px 0;\" />";
+					$img_tag = cbia_build_content_img_tag($url, $alt, $section);
 					cbia_replace_first_occurrence($text_html, $mk['full'], $img_tag);
 					cbia_log("Imagen insertada OK (attach_id={$attach_id}) sección={$section} '{$title}'", 'INFO');
 				}
 			} else {
 				$desc_clean = cbia_sanitize_alt_from_desc($mk['desc']);
-				$placeholder = "[IMAGEN_PENDIENTE: {$desc_clean}]";
+				// Marcador pendiente oculto con CSS
+				$placeholder = "<span class='cbia-img-pendiente' style='display:none'>[IMAGEN_PENDIENTE: {$desc_clean}]</span>";
 				cbia_replace_first_occurrence($text_html, $mk['full'], $placeholder);
 
 				$pending_list[] = [
@@ -1016,22 +1458,17 @@ if (!function_exists('cbia_create_single_blog_post')) {
 			}
 		}
 
-		// Si quedaron marcadores normales por no procesar (por límite), pásalos a pendientes
+		// Si quedaron marcadores normales por no procesar (por límite), ELIMÍNALOS del HTML
 		$left = cbia_extract_image_markers($text_html);
 		if (!empty($left)) {
+			// Helper de eliminación robusta (si no existe aún)
 			foreach ($left as $mk) {
-				$desc_clean = cbia_sanitize_alt_from_desc($mk['desc']);
-				$placeholder = "[IMAGEN_PENDIENTE: {$desc_clean}]";
-				cbia_replace_first_occurrence($text_html, $mk['full'], $placeholder);
-				$pending_list[] = [
-					'desc' => $desc_clean,
-					'section' => 'body',
-					'tries' => 0,
-					'last_error' => 'not_processed_limit',
-					'status' => 'pending',
-				];
+				cbia_remove_marker_ex($text_html, $mk['full']);
 			}
 		}
+
+		// Limpieza de artefactos: líneas con solo punto, spans vacíos, exceso de saltos de línea
+		cbia_cleanup_post_html($text_html);
 
 		// 4) Crear post
 		list($wp_ok, $post_id, $wp_err) = cbia_create_post_in_wp_engine($title, $text_html, $featured_attach_id, $post_date_mysql);
@@ -1050,6 +1487,49 @@ if (!function_exists('cbia_create_single_blog_post')) {
 		update_post_meta($post_id, '_cbia_tokens_output', (string)$out);
 		update_post_meta($post_id, '_cbia_tokens_total', (string)$tot);
 		update_post_meta($post_id, '_cbia_usage_captured_at', current_time('mysql'));
+
+		// 5.1) Registrar TEXTO en costes
+		if (function_exists('cbia_costes_record_usage') && !empty($text_call)) {
+			cbia_costes_record_usage($post_id, array(
+				'type' => 'text',
+				'model' => (string)($text_call['model'] ?? ''),
+				'input_tokens' => (int)($text_call['usage']['input_tokens'] ?? 0),
+				'output_tokens' => (int)($text_call['usage']['output_tokens'] ?? 0),
+				'cached_input_tokens' => 0,
+				'ok' => 1,
+			));
+		}
+
+		// 5.2) Registrar IMÁGENES en costes
+		if (function_exists('cbia_costes_record_usage') && !empty($image_calls)) {
+			foreach ($image_calls as $ic) {
+				if (!is_array($ic)) continue;
+				cbia_costes_record_usage($post_id, array(
+					'type' => 'image',
+					'model' => (string)($ic['model'] ?? ''),
+					'input_tokens' => 0,
+					'output_tokens' => 0,
+					'cached_input_tokens' => 0,
+					'ok' => (int)(!empty($ic['ok'])),
+					'error' => (string)($ic['error'] ?? ''),
+				));
+			}
+		}
+
+		// Guardar lista detallada de usage para cálculo de costes real (incluye output/input)
+		if (!empty($text_call) && !empty($text_call['model'])) {
+			cbia_usage_append_call($post_id, $text_call['context'] ?? 'blog_text', $text_call['model'], $text_call['usage'] ?? cbia_usage_empty(), array(
+				'title' => $title,
+			));
+		}
+
+		// Guardar llamadas de imágenes (para coste por imagen y auditoría)
+		if (!empty($image_calls)) {
+			foreach ($image_calls as $ic) {
+				if (!is_array($ic)) continue;
+				cbia_image_append_call($post_id, $ic['section'] ?? 'body', $ic['model'] ?? '', !empty($ic['ok']), (int)($ic['attach_id'] ?? 0), (string)($ic['error'] ?? ''));
+			}
+		}
 
 		// Conteo palabras aproximado
 		$wc = str_word_count(wp_strip_all_tags((string)$text_html));
@@ -1075,6 +1555,7 @@ if (!function_exists('cbia_create_single_blog_post')) {
 
 if (!function_exists('cbia_fill_pending_images_for_post')) {
 	function cbia_fill_pending_images_for_post($post_id, $max_images = 4) {
+		cbia_try_unlimited_runtime();
 		$post = get_post($post_id);
 		if (!$post) return 0;
 
@@ -1107,19 +1588,49 @@ if (!function_exists('cbia_fill_pending_images_for_post')) {
 			}
 		}
 
-		foreach ($pending as $pm) {
+		// Helper: reemplazar el token pendiente (dentro de su span) por la imagen generada
+		if (!function_exists('cbia_replace_pending_token')) {
+			function cbia_replace_pending_token(&$html, $pending_token, $replacement) {
+				$token = (string)$pending_token;
+				$pattern = '/<span[^>]*class=("|\')cbia-img-pendiente\1[^>]*>\s*' . preg_quote($token, '/') . '\s*<\/span>/iu';
+				$count = 0;
+				$new = preg_replace($pattern, (string)$replacement, (string)$html, 1, $count);
+				if ($count > 0 && $new !== null) {
+					$html = $new;
+					return true;
+				}
+				cbia_replace_first_occurrence($html, $token, (string)$replacement);
+				return true;
+			}
+		}
+
+		foreach ($pending as $pk => $pm) {
 			if (cbia_is_stop_requested()) break;
 			if ($filled >= $max_images) break;
 
 			$desc = (string)$pm['desc'];
-			$section = cbia_detect_marker_section($html, (int)$pm['pos'], false);
+			// Detectar sección nuevamente por posición actual del marcador (puede haber cambiado)
+			$current_pos = strpos($html, $pm['full']);
+			$section = ($current_pos !== false) ? cbia_detect_marker_section($html, (int)$current_pos, false) : 'body';
 
 			list($ok, $attach_id, $m, $e) = cbia_generate_image_openai($desc, $section, $title);
 			if ($ok && $attach_id) {
+				// Registrar usage de imagen en costes (success)
+				if (function_exists('cbia_costes_record_usage')) {
+					cbia_costes_record_usage($post_id, array(
+						'type' => 'image',
+						'model' => (string)$m,
+						'input_tokens' => 0,
+						'output_tokens' => 0,
+						'cached_input_tokens' => 0,
+						'ok' => 1,
+						'error' => '',
+					));
+				}
 				$url = wp_get_attachment_url((int)$attach_id);
 				$alt = cbia_build_img_alt($title, $section, $desc);
-				$img_tag = "<img src=\"" . esc_url($url) . "\" alt=\"" . esc_attr($alt) . "\" style=\"display:block;width:100%;height:auto;margin:15px 0;\" />";
-				cbia_replace_first_occurrence($html, $pm['full'], $img_tag);
+				$img_tag = cbia_build_content_img_tag($url, $alt, $section);
+				cbia_replace_pending_token($html, $pm['full'], $img_tag);
 				$filled++;
 
 				// marca en lista
@@ -1135,7 +1646,20 @@ if (!function_exists('cbia_fill_pending_images_for_post')) {
 				unset($it);
 
 				cbia_log("Pendientes: imagen insertada post {$post_id} attach_id={$attach_id}", 'INFO');
+				cbia_image_append_call($post_id, $section, $m, true, (int)$attach_id, '');
 			} else {
+				// Registrar usage de imagen en costes (error)
+				if (function_exists('cbia_costes_record_usage')) {
+					cbia_costes_record_usage($post_id, array(
+						'type' => 'image',
+						'model' => (string)$m,
+						'input_tokens' => 0,
+						'output_tokens' => 0,
+						'cached_input_tokens' => 0,
+						'ok' => 0,
+						'error' => (string)($e ?: ''),
+					));
+				}
 				// incrementa tries en lista
 				foreach ($list as &$it) {
 					if (!is_array($it)) continue;
@@ -1148,10 +1672,13 @@ if (!function_exists('cbia_fill_pending_images_for_post')) {
 				unset($it);
 
 				cbia_log("Pendientes: fallo generando imagen post {$post_id}: " . ($e ?: ''), 'ERROR');
+				cbia_image_append_call($post_id, $section, $m, false, 0, (string)($e ?: ''));
 			}
 		}
 
 		if ($filled > 0) {
+			// Limpieza de artefactos antes de guardar
+			cbia_cleanup_post_html($html);
 			wp_update_post(['ID' => $post_id, 'post_content' => $html]);
 		}
 
@@ -1168,6 +1695,7 @@ if (!function_exists('cbia_fill_pending_images_for_post')) {
 
 if (!function_exists('cbia_run_fill_pending_images')) {
 	function cbia_run_fill_pending_images($limit_posts = 10) {
+		cbia_try_unlimited_runtime();
 		$limit_posts = max(1, (int)$limit_posts);
 
 		cbia_log("Rellenar pendientes: buscando posts (limit={$limit_posts})", 'INFO');
@@ -1213,4 +1741,3 @@ if (!function_exists('cbia_run_fill_pending_images')) {
 		return $total_filled;
 	}
 }
-

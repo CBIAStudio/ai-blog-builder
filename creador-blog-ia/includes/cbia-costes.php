@@ -1,26 +1,21 @@
 <?php
 /**
  * CBIA - Costes (estimación + cálculo post-hoc)
- * v10
+ * v12 (FIX: imágenes con precio fijo + botón "solo coste real" + tokens reales en log)
  *
  * Archivo: includes/cbia-costes.php
  *
- * Base:
- * - Usa tabla de precios aportada por el usuario (USD por 1M tokens):
- *   INPUT / CACHED INPUT / OUTPUT
- * - Muestra todo en EUROS (con conversión USD->EUR configurable).
+ * OBJETIVO:
+ * - Estimación sencilla por post: TEXTO + IMÁGENES + SEO (si hay llamadas de relleno Yoast/SEO)
+ * - Cálculo REAL post-hoc: suma el coste POR CADA LLAMADA guardada en _cbia_usage_rows,
+ *   respetando el modelo real usado en cada llamada (texto vs imagen vs seo) y su tabla de precios.
  *
- * Incluye:
- * - Estimación por PALABRAS (según variante short/medium/long en cbia_settings)
- * - Conversión interna palabras->tokens (aprox)
- * - Multiplicadores de reintentos (texto / imagen) para aproximar coste real
- * - Configurar nº de llamadas de texto e imágenes por post (para estimar)
- * - Selección de modelo de IMAGEN (solo modelos del plugin)
- * - Guardado opcional de usage real por post (si el engine lo llama)
+ * IMPORTANTE:
+ * - Para que el cálculo REAL funcione, el engine/yoast debe llamar a:
+ *   cbia_costes_record_usage($post_id, [...])
+ *   en CADA llamada a OpenAI (texto / imagen / seo).
  *
- * NOTA:
- * - El bloqueo de modelos se gestiona en Config (cbia_settings['blocked_models']).
- *   Aquí SOLO lo mostramos como aviso si el modelo actual está bloqueado.
+ * - Este archivo NO “adivina” tokens reales de imágenes si no se registran. Solo estima si faltan.
  */
 
 if (!defined('ABSPATH')) exit;
@@ -54,6 +49,10 @@ if (!function_exists('cbia_costes_log_key')) {
 }
 if (!function_exists('cbia_costes_log')) {
     function cbia_costes_log($msg) {
+        if (function_exists('cbia_log')) {
+            cbia_log('[COSTES] ' . (string)$msg, 'INFO');
+            return;
+        }
         $log = get_option(cbia_costes_log_key(), '');
         $ts  = current_time('mysql');
         $log .= "[{$ts}] COSTES: {$msg}\n";
@@ -63,10 +62,22 @@ if (!function_exists('cbia_costes_log')) {
     }
 }
 if (!function_exists('cbia_costes_log_get')) {
-    function cbia_costes_log_get() { return (string)get_option(cbia_costes_log_key(), ''); }
+    function cbia_costes_log_get() {
+        if (function_exists('cbia_get_log')) {
+            $payload = cbia_get_log();
+            return is_array($payload) ? (string)($payload['log'] ?? '') : (string)$payload;
+        }
+        return (string)get_option(cbia_costes_log_key(), '');
+    }
 }
 if (!function_exists('cbia_costes_log_clear')) {
-    function cbia_costes_log_clear() { delete_option(cbia_costes_log_key()); }
+    function cbia_costes_log_clear() {
+        if (function_exists('cbia_clear_log')) {
+            cbia_clear_log();
+            return;
+        }
+        delete_option(cbia_costes_log_key());
+    }
 }
 
 /* =========================================================
@@ -82,10 +93,6 @@ if (!function_exists('cbia_get_settings')) {
 /* =========================================================
    =============== BLOQUEO MODELOS (desde Config) ============
    ========================================================= */
-/**
- * En Config guardas blocked_models como array asociativo: [model => 1]
- * (y no como lista).
- */
 if (!function_exists('cbia_costes_is_model_blocked')) {
     function cbia_costes_is_model_blocked($model) {
         $cbia = cbia_get_settings();
@@ -105,14 +112,14 @@ if (!function_exists('cbia_costes_is_model_blocked')) {
    ===================== TABLA DE PRECIOS ===================
    Valores en USD por 1.000.000 tokens (1M)
    SOLO modelos usados en el plugin (según tu Config actual):
-   - Texto: gpt-4.1*, gpt-5*, gpt-5.1, gpt-5.2
+   - Texto/SEO: gpt-4.1*, gpt-5*, gpt-5.1, gpt-5.2
    - Imagen: gpt-image-1, gpt-image-1-mini
    ========================================================= */
 if (!function_exists('cbia_costes_price_table_usd_per_million')) {
     function cbia_costes_price_table_usd_per_million() {
         // input, cached_input, output  (USD por 1M tokens)
         return array(
-            // TEXTO (según tu lista reducida)
+            // TEXTO / SEO
             'gpt-4.1'       => array('in'=>2.00,  'cin'=>0.50,  'out'=>8.00),
             'gpt-4.1-mini'  => array('in'=>0.40,  'cin'=>0.10,  'out'=>1.60),
             'gpt-4.1-nano'  => array('in'=>0.10,  'cin'=>0.025, 'out'=>0.40),
@@ -124,10 +131,25 @@ if (!function_exists('cbia_costes_price_table_usd_per_million')) {
             'gpt-5.1'       => array('in'=>1.25,  'cin'=>0.125, 'out'=>10.00),
             'gpt-5.2'       => array('in'=>1.75,  'cin'=>0.175, 'out'=>14.00),
 
-            // IMAGEN (según tabla que pasaste)
+            // IMAGEN (solo para estimación basada en tokens; por defecto usaremos tarifa fija)
             'gpt-image-1'       => array('in'=>10.00, 'cin'=>2.50, 'out'=>40.00),
             'gpt-image-1-mini'  => array('in'=>2.50,  'cin'=>0.25, 'out'=>8.00),
         );
+    }
+}
+
+/* =========================================================
+   ======= PRECIOS FIJOS POR IMAGEN (USD por generación) ===
+   ========================================================= */
+if (!function_exists('cbia_costes_image_flat_price_usd')) {
+    function cbia_costes_image_flat_price_usd($model, $cost_settings) {
+        $model = (string)$model;
+        $def_mini = isset($cost_settings['image_flat_usd_mini']) ? (float)$cost_settings['image_flat_usd_mini'] : 0.040; // editable
+        $def_full = isset($cost_settings['image_flat_usd_full']) ? (float)$cost_settings['image_flat_usd_full'] : 0.080; // editable
+        if ($model === 'gpt-image-1-mini') return $def_mini;
+        if ($model === 'gpt-image-1') return $def_full;
+        // fallback: si no reconocemos el modelo, usar mini
+        return $def_mini;
     }
 }
 
@@ -153,10 +175,6 @@ if (!function_exists('cbia_costes_count_words')) {
     }
 }
 
-/**
- * Conversión aproximada palabras->tokens.
- * Ajustable en settings (tokens_per_word).
- */
 if (!function_exists('cbia_costes_words_to_tokens')) {
     function cbia_costes_words_to_tokens($words, $tokens_per_word = 1.30) {
         $w = max(0, (float)$words);
@@ -165,12 +183,6 @@ if (!function_exists('cbia_costes_words_to_tokens')) {
     }
 }
 
-/**
- * Estima tokens de input (texto):
- * - prompt_single_all (config)
- * - título
- * - overhead fijo
- */
 if (!function_exists('cbia_costes_estimate_input_tokens')) {
     function cbia_costes_estimate_input_tokens($title, $settings_cbia, $tokens_per_word, $input_overhead_tokens) {
         $prompt = isset($settings_cbia['prompt_single_all']) ? (string)$settings_cbia['prompt_single_all'] : '';
@@ -183,9 +195,6 @@ if (!function_exists('cbia_costes_estimate_input_tokens')) {
     }
 }
 
-/**
- * Estima tokens de output (texto) según variante.
- */
 if (!function_exists('cbia_costes_estimate_output_tokens')) {
     function cbia_costes_estimate_output_tokens($settings_cbia, $tokens_per_word) {
         $variant = $settings_cbia['post_length_variant'] ?? 'medium';
@@ -194,9 +203,6 @@ if (!function_exists('cbia_costes_estimate_output_tokens')) {
     }
 }
 
-/**
- * Estima tokens input por imágenes (prompt imagen) *por llamada de imagen*.
- */
 if (!function_exists('cbia_costes_estimate_image_prompt_input_tokens_per_call')) {
     function cbia_costes_estimate_image_prompt_input_tokens_per_call($settings_cbia, $tokens_per_word, $per_image_overhead_words) {
         $p_intro = (string)($settings_cbia['prompt_img_intro'] ?? '');
@@ -210,7 +216,6 @@ if (!function_exists('cbia_costes_estimate_image_prompt_input_tokens_per_call'))
         $sum_words += max(10, cbia_costes_count_words($p_conc));
         $sum_words += max(10, cbia_costes_count_words($p_faq));
 
-        // promedio de los 4 prompts (aprox)
         $avg_words = (int)ceil($sum_words / 4);
         $avg_words += (int)max(0, (int)$per_image_overhead_words);
 
@@ -269,23 +274,15 @@ if (!function_exists('cbia_costes_calc_cost_eur')) {
 /* =========================================================
    ====== GUARDAR USAGE REAL POR POST (engine debe llamar) ===
    ========================================================= */
-/**
- * El engine debe llamar a esta función tras cada llamada a OpenAI (texto o imagen).
- * Guarda tokens reales y costes estimados en meta para cálculo post-hoc.
- *
- * Ejemplo de $usage:
- * [
- *   'type' => 'text'|'image',
- *   'model' => 'gpt-4.1-mini' | 'gpt-image-1',
- *   'input_tokens' => 1234,
- *   'output_tokens' => 5678,
- *   'cached_input_tokens' => 0,
- *   'attempt' => 1,
- *   'ok' => true,
- *   'error' => '' // si falla
- * ]
- */
 if (!function_exists('cbia_costes_record_usage')) {
+    /**
+     * Guarda una fila de usage por llamada.
+     *
+     * type: 'text' | 'image' | 'seo' (seo se trata como texto a nivel de pricing)
+     * model: modelo real usado
+     * input_tokens / output_tokens: tokens reales
+     * cached_input_tokens: si lo tienes (si no, 0)
+     */
     function cbia_costes_record_usage($post_id, $usage) {
         $post_id = (int)$post_id;
         if ($post_id <= 0) return false;
@@ -300,15 +297,19 @@ if (!function_exists('cbia_costes_record_usage')) {
         $attempt = isset($usage['attempt']) ? (int)$usage['attempt'] : 1;
         $err   = isset($usage['error']) ? (string)$usage['error'] : '';
 
+        // normaliza type
+        $type = strtolower(trim($type));
+        if ($type !== 'image' && $type !== 'seo') $type = 'text';
+
         $row = array(
             'ts' => current_time('mysql'),
             'type' => $type,
             'model' => $model,
-            'in' => $in_t,
-            'cin' => $cin_t,
-            'out' => $out_t,
+            'in' => max(0, $in_t),
+            'cin' => max(0, $cin_t),
+            'out' => max(0, $out_t),
             'ok' => $ok,
-            'attempt' => $attempt,
+            'attempt' => max(1, $attempt),
             'error' => $err,
         );
 
@@ -317,7 +318,7 @@ if (!function_exists('cbia_costes_record_usage')) {
         if (!is_array($rows)) $rows = array();
         $rows[] = $row;
 
-        if (count($rows) > 120) $rows = array_slice($rows, -120);
+        if (count($rows) > 200) $rows = array_slice($rows, -200);
 
         update_post_meta($post_id, $key, $rows);
         update_post_meta($post_id, '_cbia_usage_last_ts', $row['ts']);
@@ -328,48 +329,310 @@ if (!function_exists('cbia_costes_record_usage')) {
 }
 
 /* =========================================================
-   ====== CALCULAR USAGE REAL GUARDADO (post-hoc) ============
+   ========= REAL: calcular coste por post sumando filas =====
    ========================================================= */
-if (!function_exists('cbia_costes_sum_usage_for_post')) {
-    function cbia_costes_sum_usage_for_post($post_id) {
+if (!function_exists('cbia_costes_get_usage_rows_for_post')) {
+    function cbia_costes_get_usage_rows_for_post($post_id) {
         $rows = get_post_meta((int)$post_id, '_cbia_usage_rows', true);
-        if (!is_array($rows) || empty($rows)) return null;
+        return is_array($rows) ? $rows : array();
+    }
+}
 
-        $sum = array(
-            'text_in'=>0, 'text_cin'=>0, 'text_out'=>0,
-            'image_in'=>0, 'image_cin'=>0, 'image_out'=>0,
-            'models'=>array(),
-            'calls'=>0,
-            'fails'=>0,
+if (!function_exists('cbia_costes_calc_real_for_post')) {
+    /**
+     * Devuelve:
+     * [
+     *   'eur' => float,
+     *   'calls' => int,
+     *   'fails' => int,
+     *   'by_type' => ['text'=>['eur'=>..,'calls'=>..], 'seo'=>..., 'image'=>...],
+     *   'by_model' => ['gpt-4.1-mini'=>['eur'=>..,'calls'=>..], ...],
+     * ]
+     * o null si no hay filas.
+     */
+    function cbia_costes_calc_real_for_post($post_id, $cost_settings) {
+        $rows = cbia_costes_get_usage_rows_for_post((int)$post_id);
+        if (empty($rows)) return null;
+
+        $table = cbia_costes_price_table_usd_per_million();
+        $usd_to_eur = (float)($cost_settings['usd_to_eur'] ?? 0.92);
+        $fallback_ratio = (float)($cost_settings['cached_input_ratio'] ?? 0.0);
+        $use_image_flat = !empty($cost_settings['use_image_flat_pricing']);
+        $resp_fixed_usd = (float)($cost_settings['responses_fixed_usd_per_call'] ?? 0.0);
+        $real_mult = (float)($cost_settings['real_adjust_multiplier'] ?? 1.0);
+
+        $sum_eur = 0.0;
+        $calls = 0;
+        $fails = 0;
+        $sum_in_tokens = 0; // para log
+        $sum_out_tokens = 0; // para log
+
+        $by_type = array(
+            'text' => array('eur'=>0.0,'calls'=>0),
+            'seo'  => array('eur'=>0.0,'calls'=>0),
+            'image'=> array('eur'=>0.0,'calls'=>0),
         );
+        $by_model = array();
+        $resp_calls_count = 0; // text+seo
 
         foreach ($rows as $r) {
             if (!is_array($r)) continue;
-            $type = isset($r['type']) ? (string)$r['type'] : 'text';
-            $in   = isset($r['in']) ? (int)$r['in'] : 0;
-            $cin  = isset($r['cin']) ? (int)$r['cin'] : 0;
-            $out  = isset($r['out']) ? (int)$r['out'] : 0;
-            $ok   = !empty($r['ok']) ? 1 : 0;
-            $model= isset($r['model']) ? (string)$r['model'] : '';
 
-            $sum['calls']++;
-            if (!$ok) $sum['fails']++;
+            $type = isset($r['type']) ? strtolower(trim((string)$r['type'])) : 'text';
+            if ($type !== 'image' && $type !== 'seo') $type = 'text';
 
-            if ($model !== '') $sum['models'][$model] = true;
+            $model = isset($r['model']) ? (string)$r['model'] : '';
+            $in    = isset($r['in']) ? (int)$r['in'] : 0;
+            $cin   = isset($r['cin']) ? (int)$r['cin'] : 0;
+            $out   = isset($r['out']) ? (int)$r['out'] : 0;
+            $ok    = !empty($r['ok']) ? 1 : 0;
 
-            if ($type === 'image') {
-                $sum['image_in']  += max(0,$in);
-                $sum['image_cin'] += max(0,$cin);
-                $sum['image_out'] += max(0,$out);
-            } else {
-                $sum['text_in']  += max(0,$in);
-                $sum['text_cin'] += max(0,$cin);
-                $sum['text_out'] += max(0,$out);
+            $calls++;
+            if (!$ok) $fails++;
+            if ($type === 'text' || $type === 'seo') $resp_calls_count++;
+
+            // Tokens acumulados para log (texto/seo). Para imagen normalmente 0.
+            $sum_in_tokens += (int)$in;
+            $sum_out_tokens += (int)$out;
+
+            // IMÁGENES: si está activa la tarifa plana, sumar por generación OK
+            if ($type === 'image' && $ok && $use_image_flat) {
+                $usd = (float)cbia_costes_image_flat_price_usd($model, $cost_settings);
+                $sum_eur += $usd * $usd_to_eur;
+
+                if (!isset($by_type[$type])) $by_type[$type] = array('eur'=>0.0,'calls'=>0);
+                $by_type[$type]['eur'] += $usd * $usd_to_eur;
+                $by_type[$type]['calls']++;
+
+                if (!isset($by_model[$model])) $by_model[$model] = array('eur'=>0.0,'calls'=>0);
+                $by_model[$model]['eur'] += $usd * $usd_to_eur;
+                $by_model[$model]['calls']++;
+                continue;
+            }
+
+            // Si no tenemos modelo en tabla, no podemos calcular esa fila (texto/seo o imagen sin flat)
+            if ($model === '' || !isset($table[$model])) continue;
+
+            $in = max(0, $in);
+            $cin = max(0, $cin);
+            $out = max(0, $out);
+
+            $ratio = $fallback_ratio;
+            if ($in > 0 && $cin > 0) {
+                $ratio = min(1.0, max(0.0, $cin / (float)max(1, $in)));
+            }
+
+            list($eur, $eur_in, $eur_out) = cbia_costes_calc_cost_eur($model, $in, $out, $usd_to_eur, $ratio);
+            if ($eur === null) continue;
+
+            $sum_eur += (float)$eur;
+
+            if (!isset($by_type[$type])) $by_type[$type] = array('eur'=>0.0,'calls'=>0);
+            $by_type[$type]['eur'] += (float)$eur;
+            $by_type[$type]['calls']++;
+
+            if (!isset($by_model[$model])) $by_model[$model] = array('eur'=>0.0,'calls'=>0);
+            $by_model[$model]['eur'] += (float)$eur;
+            $by_model[$model]['calls']++;
+        }
+
+        // Añadir sobrecoste fijo por llamada de texto/SEO (en USD)
+        if ($resp_fixed_usd > 0 && $resp_calls_count > 0) {
+            $sum_eur += ($resp_fixed_usd * $resp_calls_count) * $usd_to_eur;
+        }
+
+        // Multiplicador de ajuste final
+        if ($real_mult > 0 && $real_mult != 1.0) {
+            $sum_eur *= $real_mult;
+        }
+
+        return array(
+            'eur' => (float)$sum_eur,
+            'calls' => (int)$calls,
+            'fails' => (int)$fails,
+            'by_type' => $by_type,
+            'by_model' => $by_model,
+            'in_tokens' => (int)$sum_in_tokens,
+            'out_tokens' => (int)$sum_out_tokens,
+        );
+    }
+}
+
+/* =========================================================
+   ===================== ESTIMACIÓN POR POST =================
+   Incluye: TEXTO + IMAGEN + SEO
+   ========================================================= */
+if (!function_exists('cbia_costes_estimate_for_post')) {
+    function cbia_costes_estimate_for_post($post_id, $cost_settings, $cbia_settings) {
+        $table = cbia_costes_price_table_usd_per_million();
+
+        $title = get_the_title((int)$post_id);
+        if (!$title) $title = '{title}';
+
+        // Modelos
+        $model_text = (string)($cbia_settings['openai_model'] ?? 'gpt-4.1-mini');
+        if (!isset($table[$model_text])) $model_text = 'gpt-4.1-mini';
+
+        $model_seo = (string)($cost_settings['seo_model'] ?? $model_text);
+        if (!isset($table[$model_seo])) $model_seo = $model_text;
+
+        $model_img = (string)($cost_settings['image_model'] ?? 'gpt-image-1-mini');
+        if (!isset($table[$model_img])) $model_img = 'gpt-image-1-mini';
+
+        // Llamadas por post
+        $text_calls = max(1, (int)($cost_settings['text_calls_per_post'] ?? 1));
+
+        $img_calls  = (int)($cost_settings['image_calls_per_post'] ?? 0);
+        if ($img_calls <= 0) {
+            $img_calls = isset($cbia_settings['images_limit']) ? (int)$cbia_settings['images_limit'] : 3;
+        }
+        $img_calls = max(0, min(20, $img_calls));
+
+        $seo_calls = max(0, (int)($cost_settings['seo_calls_per_post'] ?? 0));
+        $seo_calls = min(20, $seo_calls);
+
+        $usd_to_eur = (float)($cost_settings['usd_to_eur'] ?? 0.92);
+        $cached_ratio = (float)($cost_settings['cached_input_ratio'] ?? 0.0);
+
+        /* ===== TEXTO ===== */
+        $in_text  = cbia_costes_estimate_input_tokens($title, $cbia_settings, (float)$cost_settings['tokens_per_word'], (int)$cost_settings['input_overhead_tokens']);
+        $out_text = cbia_costes_estimate_output_tokens($cbia_settings, (float)$cost_settings['tokens_per_word']);
+
+        $in_text  = (int)ceil($in_text  * (float)$cost_settings['mult_text']);
+        $out_text = (int)ceil($out_text * (float)$cost_settings['mult_text']);
+
+        $in_text_total  = $in_text  * $text_calls;
+        $out_text_total = $out_text * $text_calls;
+
+        list($eur_text, $eur_in_text, $eur_out_text) =
+            cbia_costes_calc_cost_eur($model_text, $in_text_total, $out_text_total, $usd_to_eur, $cached_ratio);
+        if ($eur_text === null) return null;
+
+        /* ===== IMAGEN ===== */
+        $in_img_per_call = cbia_costes_estimate_image_prompt_input_tokens_per_call($cbia_settings, (float)$cost_settings['tokens_per_word'], (int)$cost_settings['per_image_overhead_words']);
+        $out_img_per_call = max(0, (int)($cost_settings['image_output_tokens_per_call'] ?? 0));
+
+        $in_img_per_call  = (int)ceil($in_img_per_call  * (float)$cost_settings['mult_image']);
+        $out_img_per_call = (int)ceil($out_img_per_call * (float)$cost_settings['mult_image']);
+
+        $in_img_total  = $in_img_per_call  * $img_calls;
+        $out_img_total = $out_img_per_call * $img_calls;
+
+        $use_image_flat = !empty($cost_settings['use_image_flat_pricing']);
+        if ($use_image_flat) {
+            $usd_flat = (float)cbia_costes_image_flat_price_usd($model_img, $cost_settings);
+            $eur_img = $img_calls * $usd_flat * $usd_to_eur;
+            $eur_in_img = 0.0; $eur_out_img = 0.0;
+        } else {
+            list($eur_img, $eur_in_img, $eur_out_img) =
+                cbia_costes_calc_cost_eur($model_img, $in_img_total, $out_img_total, $usd_to_eur, $cached_ratio);
+            if ($eur_img === null) $eur_img = 0.0;
+        }
+
+        /* ===== SEO ===== */
+        $seo_in_per_call  = max(0, (int)($cost_settings['seo_input_tokens_per_call'] ?? 0));
+        $seo_out_per_call = max(0, (int)($cost_settings['seo_output_tokens_per_call'] ?? 0));
+
+        $seo_in_per_call  = (int)ceil($seo_in_per_call  * (float)$cost_settings['mult_seo']);
+        $seo_out_per_call = (int)ceil($seo_out_per_call * (float)$cost_settings['mult_seo']);
+
+        $seo_in_total  = $seo_in_per_call  * $seo_calls;
+        $seo_out_total = $seo_out_per_call * $seo_calls;
+
+        $eur_seo = 0.0;
+        if ($seo_calls > 0 && ($seo_in_total > 0 || $seo_out_total > 0)) {
+            list($eur_seo_calc, $eur_in_seo, $eur_out_seo) =
+                cbia_costes_calc_cost_eur($model_seo, $seo_in_total, $seo_out_total, $usd_to_eur, $cached_ratio);
+            if ($eur_seo_calc !== null) $eur_seo = (float)$eur_seo_calc;
+        }
+
+        return (float)$eur_text + (float)$eur_img + (float)$eur_seo;
+    }
+}
+
+/* =========================================================
+   ======================= AJAX LOG =========================
+   ========================================================= */
+add_action('wp_ajax_cbia_get_costes_log', function () {
+    if (!current_user_can('manage_options')) wp_send_json_error('forbidden', 403);
+    nocache_headers();
+    if (function_exists('cbia_get_log')) {
+        wp_send_json_success(cbia_get_log());
+    }
+    wp_send_json_success(cbia_costes_log_get());
+});
+
+/* =========================================================
+   ============ CÁLCULO ÚLTIMOS POSTS (real/estimado) =======
+   ========================================================= */
+if (!function_exists('cbia_costes_calc_last_posts')) {
+    function cbia_costes_calc_last_posts($n, $only_cbia, $use_est_if_missing, $cost_settings, $cbia_settings) {
+        $n = max(1, min(200, (int)$n));
+
+        $args = array(
+            'post_type'      => 'post',
+            'posts_per_page' => $n,
+            'post_status'    => array('publish','future','draft','pending'),
+            'orderby'        => 'date',
+            'order'          => 'DESC',
+            'fields'         => 'ids',
+            'no_found_rows'  => true,
+        );
+
+        if ($only_cbia) {
+            $args['meta_query'] = array(
+                array('key' => '_cbia_created', 'value' => '1', 'compare' => '=')
+            );
+        }
+
+        $q = new WP_Query($args);
+        $ids = !empty($q->posts) ? $q->posts : array();
+        if (empty($ids)) return null;
+
+        $total_eur = 0.0;
+        $real_posts = 0;
+        $est_posts  = 0;
+
+        $real_calls = 0;
+        $real_fails = 0;
+        $tok_in_sum = 0;
+        $tok_out_sum = 0;
+
+        foreach ($ids as $post_id) {
+            $post_id = (int)$post_id;
+
+            // 1) REAL: suma por filas (modelo real por llamada)
+            $real = cbia_costes_calc_real_for_post($post_id, $cost_settings);
+            if (is_array($real)) {
+                $total_eur += (float)$real['eur'];
+                $real_posts++;
+                $real_calls += (int)$real['calls'];
+                $real_fails += (int)$real['fails'];
+                $tok_in_sum += (int)$real['in_tokens'];
+                $tok_out_sum += (int)$real['out_tokens'];
+                continue;
+            }
+
+            // 2) ESTIMACIÓN
+            if ($use_est_if_missing) {
+                $est = cbia_costes_estimate_for_post($post_id, $cost_settings, $cbia_settings);
+                if ($est !== null) {
+                    $total_eur += (float)$est;
+                    $est_posts++;
+                }
             }
         }
 
-        $sum['models'] = array_keys($sum['models']);
-        return $sum;
+        return array(
+            'posts' => count($ids),
+            'real_posts' => $real_posts,
+            'est_posts' => $est_posts,
+            'eur_total' => $total_eur,
+            'real_calls' => $real_calls,
+            'real_fails' => $real_fails,
+            'tokens_in' => $tok_in_sum,
+            'tokens_out'=> $tok_out_sum,
+        );
     }
 }
 
@@ -389,20 +652,34 @@ if (!function_exists('cbia_render_tab_costes')) {
             'input_overhead_tokens' => 350,
             'per_image_overhead_words' => 18,
             'cached_input_ratio' => 0.0, // 0..1
+            // Imágenes: usar precio fijo por generación (recomendado)
+            'use_image_flat_pricing' => 1,
+            'image_flat_usd_mini' => 0.040,
+            'image_flat_usd_full' => 0.080,
+            // Ajustes finos
+            'responses_fixed_usd_per_call' => 0.000,
+            'real_adjust_multiplier' => 1.00,
 
             // Multiplicadores para aproximar fallos/reintentos
             'mult_text'  => 1.00,
             'mult_image' => 1.00,
+            'mult_seo'   => 1.00,
 
-            // NUEVO: llamadas por post (estimación)
-            'text_calls_per_post'  => 1, // nº de llamadas de texto por post
+            // llamadas por post (estimación)
+            'text_calls_per_post'  => 1,
             'image_calls_per_post' => 0, // 0 => usa images_limit
 
-            // NUEVO: modelo imagen (solo plugin)
+            // modelo imagen
             'image_model' => 'gpt-image-1-mini',
 
-            // NUEVO: output tokens por llamada de imagen (opcional)
+            // output tokens por llamada de imagen (opcional)
             'image_output_tokens_per_call' => 0,
+
+            // SEO (relleno Yoast / metas / etc)
+            'seo_calls_per_post' => 0,
+            'seo_model' => '',
+            'seo_input_tokens_per_call' => 320,
+            'seo_output_tokens_per_call' => 180,
         );
         $cost = array_merge($defaults, $cost);
 
@@ -413,6 +690,9 @@ if (!function_exists('cbia_render_tab_costes')) {
 
         $model_img_current = isset($cost['image_model']) ? (string)$cost['image_model'] : 'gpt-image-1-mini';
         if (!isset($table[$model_img_current])) $model_img_current = 'gpt-image-1-mini';
+
+        $model_seo_current = (string)($cost['seo_model'] ?? '');
+        if ($model_seo_current === '' || !isset($table[$model_seo_current])) $model_seo_current = $model_text_current;
 
         $notice = '';
 
@@ -441,6 +721,13 @@ if (!function_exists('cbia_render_tab_costes')) {
                 if ($cost['cached_input_ratio'] < 0) $cost['cached_input_ratio'] = 0;
                 if ($cost['cached_input_ratio'] > 1) $cost['cached_input_ratio'] = 1;
 
+                // Tarifa fija por imagen
+                $cost['use_image_flat_pricing'] = !empty($u['use_image_flat_pricing']) ? 1 : 0;
+                $cost['image_flat_usd_mini'] = isset($u['image_flat_usd_mini']) ? (float)str_replace(',', '.', (string)$u['image_flat_usd_mini']) : (float)$cost['image_flat_usd_mini'];
+                if ($cost['image_flat_usd_mini'] < 0) $cost['image_flat_usd_mini'] = 0.0;
+                $cost['image_flat_usd_full'] = isset($u['image_flat_usd_full']) ? (float)str_replace(',', '.', (string)$u['image_flat_usd_full']) : (float)$cost['image_flat_usd_full'];
+                if ($cost['image_flat_usd_full'] < 0) $cost['image_flat_usd_full'] = 0.0;
+
                 $cost['mult_text'] = isset($u['mult_text']) ? (float)str_replace(',', '.', (string)$u['mult_text']) : (float)$cost['mult_text'];
                 if ($cost['mult_text'] < 1.0) $cost['mult_text'] = 1.0;
                 if ($cost['mult_text'] > 5.0) $cost['mult_text'] = 5.0;
@@ -449,7 +736,18 @@ if (!function_exists('cbia_render_tab_costes')) {
                 if ($cost['mult_image'] < 1.0) $cost['mult_image'] = 1.0;
                 if ($cost['mult_image'] > 5.0) $cost['mult_image'] = 5.0;
 
-                // NUEVO: nº llamadas texto/imagen
+                $cost['mult_seo'] = isset($u['mult_seo']) ? (float)str_replace(',', '.', (string)$u['mult_seo']) : (float)$cost['mult_seo'];
+                if ($cost['mult_seo'] < 1.0) $cost['mult_seo'] = 1.0;
+                if ($cost['mult_seo'] > 5.0) $cost['mult_seo'] = 5.0;
+
+                // Ajustes finos
+                $cost['responses_fixed_usd_per_call'] = isset($u['responses_fixed_usd_per_call']) ? (float)str_replace(',', '.', (string)$u['responses_fixed_usd_per_call']) : (float)$cost['responses_fixed_usd_per_call'];
+                if ($cost['responses_fixed_usd_per_call'] < 0) $cost['responses_fixed_usd_per_call'] = 0.0;
+                $cost['real_adjust_multiplier'] = isset($u['real_adjust_multiplier']) ? (float)str_replace(',', '.', (string)$u['real_adjust_multiplier']) : (float)$cost['real_adjust_multiplier'];
+                if ($cost['real_adjust_multiplier'] < 0.5) $cost['real_adjust_multiplier'] = 0.5;
+                if ($cost['real_adjust_multiplier'] > 1.5) $cost['real_adjust_multiplier'] = 1.5;
+
+                // nº llamadas texto/imagen
                 $cost['text_calls_per_post'] = isset($u['text_calls_per_post']) ? (int)$u['text_calls_per_post'] : (int)$cost['text_calls_per_post'];
                 if ($cost['text_calls_per_post'] < 1) $cost['text_calls_per_post'] = 1;
                 if ($cost['text_calls_per_post'] > 20) $cost['text_calls_per_post'] = 20;
@@ -458,17 +756,34 @@ if (!function_exists('cbia_render_tab_costes')) {
                 if ($cost['image_calls_per_post'] < 0) $cost['image_calls_per_post'] = 0;
                 if ($cost['image_calls_per_post'] > 20) $cost['image_calls_per_post'] = 20;
 
-                // NUEVO: modelo imagen (solo 2)
+                // modelo imagen (solo 2)
                 $im = isset($u['image_model']) ? sanitize_text_field((string)$u['image_model']) : (string)$cost['image_model'];
                 if (!isset($table[$im]) || ($im !== 'gpt-image-1' && $im !== 'gpt-image-1-mini')) {
                     $im = 'gpt-image-1-mini';
                 }
                 $cost['image_model'] = $im;
 
-                // NUEVO: output tokens por imagen
+                // output tokens por imagen
                 $cost['image_output_tokens_per_call'] = isset($u['image_output_tokens_per_call']) ? (int)$u['image_output_tokens_per_call'] : (int)$cost['image_output_tokens_per_call'];
                 if ($cost['image_output_tokens_per_call'] < 0) $cost['image_output_tokens_per_call'] = 0;
                 if ($cost['image_output_tokens_per_call'] > 50000) $cost['image_output_tokens_per_call'] = 50000;
+
+                // SEO settings
+                $cost['seo_calls_per_post'] = isset($u['seo_calls_per_post']) ? (int)$u['seo_calls_per_post'] : (int)$cost['seo_calls_per_post'];
+                if ($cost['seo_calls_per_post'] < 0) $cost['seo_calls_per_post'] = 0;
+                if ($cost['seo_calls_per_post'] > 20) $cost['seo_calls_per_post'] = 20;
+
+                $seo_model = isset($u['seo_model']) ? sanitize_text_field((string)$u['seo_model']) : (string)$cost['seo_model'];
+                if ($seo_model === '' || !isset($table[$seo_model])) $seo_model = $model_text_current;
+                $cost['seo_model'] = $seo_model;
+
+                $cost['seo_input_tokens_per_call'] = isset($u['seo_input_tokens_per_call']) ? (int)$u['seo_input_tokens_per_call'] : (int)$cost['seo_input_tokens_per_call'];
+                if ($cost['seo_input_tokens_per_call'] < 0) $cost['seo_input_tokens_per_call'] = 0;
+                if ($cost['seo_input_tokens_per_call'] > 50000) $cost['seo_input_tokens_per_call'] = 50000;
+
+                $cost['seo_output_tokens_per_call'] = isset($u['seo_output_tokens_per_call']) ? (int)$u['seo_output_tokens_per_call'] : (int)$cost['seo_output_tokens_per_call'];
+                if ($cost['seo_output_tokens_per_call'] < 0) $cost['seo_output_tokens_per_call'] = 0;
+                if ($cost['seo_output_tokens_per_call'] > 50000) $cost['seo_output_tokens_per_call'] = 50000;
 
                 update_option(cbia_costes_settings_key(), $cost);
                 $notice = 'saved';
@@ -493,9 +808,22 @@ if (!function_exists('cbia_render_tab_costes')) {
 
                     $sum = cbia_costes_calc_last_posts($n, $only_cbia, $use_est_if_missing, $cost, $cbia);
                     if ($sum) {
-                        cbia_costes_log("Cálculo últimos {$n}: posts={$sum['posts']} real={$sum['real_posts']} est={$sum['est_posts']} total€=" . number_format((float)$sum['eur_total'], 4, ',', '.'));
+                        cbia_costes_log("Cálculo últimos {$n}: posts={$sum['posts']} real={$sum['real_posts']} est={$sum['est_posts']} real_calls={$sum['real_calls']} real_fails={$sum['real_fails']} tokens_in={$sum['tokens_in']} tokens_out={$sum['tokens_out']} total€=" . number_format((float)$sum['eur_total'], 4, ',', '.'));
                     } else {
                         cbia_costes_log("Cálculo últimos {$n}: sin resultados.");
+                    }
+                    $notice = 'calc';
+                }
+
+                if ($action === 'calc_last_real') {
+                    $n = isset($u['calc_last_n']) ? (int)$u['calc_last_n'] : 20;
+                    $n = max(1, min(200, $n));
+                    $only_cbia = !empty($u['calc_only_cbia']) ? true : false;
+                    $sum = cbia_costes_calc_last_posts($n, $only_cbia, false, $cost, $cbia);
+                    if ($sum) {
+                        cbia_costes_log("Cálculo SOLO REAL últimos {$n}: posts={$sum['posts']} real={$sum['real_posts']} real_calls={$sum['real_calls']} real_fails={$sum['real_fails']} tokens_in={$sum['tokens_in']} tokens_out={$sum['tokens_out']} total€=" . number_format((float)$sum['eur_total'], 4, ',', '.'));
+                    } else {
+                        cbia_costes_log("Cálculo SOLO REAL últimos {$n}: sin resultados.");
                     }
                     $notice = 'calc';
                 }
@@ -512,49 +840,74 @@ if (!function_exists('cbia_render_tab_costes')) {
         $model_img_current = isset($cost['image_model']) ? (string)$cost['image_model'] : 'gpt-image-1-mini';
         if (!isset($table[$model_img_current])) $model_img_current = 'gpt-image-1-mini';
 
+        $model_seo_current = (string)($cost['seo_model'] ?? '');
+        if ($model_seo_current === '' || !isset($table[$model_seo_current])) $model_seo_current = $model_text_current;
+
         // llamadas por post
         $text_calls = max(1, (int)$cost['text_calls_per_post']);
         $img_calls  = (int)$cost['image_calls_per_post'];
 
-        // si img_calls = 0, usamos images_limit de Config (1..4)
         if ($img_calls <= 0) {
             $img_calls = isset($cbia['images_limit']) ? (int)$cbia['images_limit'] : 3;
         }
         $img_calls = max(0, min(20, $img_calls));
 
-        // Estimación por defecto: 1 llamada de texto => input+output, multiplicado por text_calls
-        $in_tokens_text_per_call  = cbia_costes_estimate_input_tokens('{title}', $cbia, $cost['tokens_per_word'], $cost['input_overhead_tokens']);
-        $out_tokens_text_per_call = cbia_costes_estimate_output_tokens($cbia, $cost['tokens_per_word']);
+        $seo_calls = max(0, (int)$cost['seo_calls_per_post']);
+        $seo_calls = min(20, $seo_calls);
 
-        // imagen: estimar input por llamada, y output configurable
-        $in_tokens_img_per_call   = cbia_costes_estimate_image_prompt_input_tokens_per_call($cbia, $cost['tokens_per_word'], $cost['per_image_overhead_words']);
+        // Estimación tokens TEXTO por llamada
+        $in_tokens_text_per_call  = cbia_costes_estimate_input_tokens('{title}', $cbia, (float)$cost['tokens_per_word'], (int)$cost['input_overhead_tokens']);
+        $out_tokens_text_per_call = cbia_costes_estimate_output_tokens($cbia, (float)$cost['tokens_per_word']);
+
+        // Imagen: input por llamada, output configurable
+        $in_tokens_img_per_call   = cbia_costes_estimate_image_prompt_input_tokens_per_call($cbia, (float)$cost['tokens_per_word'], (int)$cost['per_image_overhead_words']);
         $out_tokens_img_per_call  = max(0, (int)$cost['image_output_tokens_per_call']);
 
-        // Multiplicadores reintentos (aplicamos a tokens, y luego multiplicamos por nº llamadas)
+        // SEO: tokens por llamada configurables
+        $in_tokens_seo_per_call   = max(0, (int)$cost['seo_input_tokens_per_call']);
+        $out_tokens_seo_per_call  = max(0, (int)$cost['seo_output_tokens_per_call']);
+
+        // Multiplicadores reintentos
         $in_tokens_text_per_call_m  = (int)ceil($in_tokens_text_per_call  * (float)$cost['mult_text']);
         $out_tokens_text_per_call_m = (int)ceil($out_tokens_text_per_call * (float)$cost['mult_text']);
 
         $in_tokens_img_per_call_m   = (int)ceil($in_tokens_img_per_call   * (float)$cost['mult_image']);
         $out_tokens_img_per_call_m  = (int)ceil($out_tokens_img_per_call  * (float)$cost['mult_image']);
 
-        // Totales por post (estimación)
+        $in_tokens_seo_per_call_m   = (int)ceil($in_tokens_seo_per_call   * (float)$cost['mult_seo']);
+        $out_tokens_seo_per_call_m  = (int)ceil($out_tokens_seo_per_call  * (float)$cost['mult_seo']);
+
+        // Totales por post
         $in_tokens_text_total  = $in_tokens_text_per_call_m  * $text_calls;
         $out_tokens_text_total = $out_tokens_text_per_call_m * $text_calls;
 
         $in_tokens_img_total   = $in_tokens_img_per_call_m   * $img_calls;
         $out_tokens_img_total  = $out_tokens_img_per_call_m  * $img_calls;
 
-        // Coste texto (modelo de texto de Config)
-        list($eur_total_text, $eur_in_text, $eur_out_text) =
-            cbia_costes_calc_cost_eur($model_text_current, $in_tokens_text_total, $out_tokens_text_total, $cost['usd_to_eur'], $cost['cached_input_ratio']);
+        $in_tokens_seo_total   = $in_tokens_seo_per_call_m   * $seo_calls;
+        $out_tokens_seo_total  = $out_tokens_seo_per_call_m  * $seo_calls;
 
-        // Coste imágenes (modelo imagen seleccionado en esta pestaña)
+        // Costes estimados por bloque
+        list($eur_total_text, $eur_in_text, $eur_out_text) =
+            cbia_costes_calc_cost_eur($model_text_current, $in_tokens_text_total, $out_tokens_text_total, (float)$cost['usd_to_eur'], (float)$cost['cached_input_ratio']);
+
         list($eur_total_img, $eur_in_img, $eur_out_img) =
-            cbia_costes_calc_cost_eur($model_img_current, $in_tokens_img_total, $out_tokens_img_total, $cost['usd_to_eur'], $cost['cached_input_ratio']);
+            cbia_costes_calc_cost_eur($model_img_current, $in_tokens_img_total, $out_tokens_img_total, (float)$cost['usd_to_eur'], (float)$cost['cached_input_ratio']);
+
+        $eur_total_seo = 0.0; $eur_in_seo = 0.0; $eur_out_seo = 0.0;
+        if ($seo_calls > 0 && ($in_tokens_seo_total > 0 || $out_tokens_seo_total > 0)) {
+            list($eur_total_seo_tmp, $eur_in_seo_tmp, $eur_out_seo_tmp) =
+                cbia_costes_calc_cost_eur($model_seo_current, $in_tokens_seo_total, $out_tokens_seo_total, (float)$cost['usd_to_eur'], (float)$cost['cached_input_ratio']);
+            if ($eur_total_seo_tmp !== null) {
+                $eur_total_seo = (float)$eur_total_seo_tmp;
+                $eur_in_seo = (float)$eur_in_seo_tmp;
+                $eur_out_seo = (float)$eur_out_seo_tmp;
+            }
+        }
 
         $eur_total_est = null;
         if ($eur_total_text !== null && $eur_total_img !== null) {
-            $eur_total_est = $eur_total_text + $eur_total_img;
+            $eur_total_est = (float)$eur_total_text + (float)$eur_total_img + (float)$eur_total_seo;
         }
 
         // Notices
@@ -585,12 +938,21 @@ if (!function_exists('cbia_render_tab_costes')) {
                         <td><code><?php echo esc_html($model_img_current); ?></code></td>
                     </tr>
                     <tr>
+                        <td><strong>Modelo SEO (Costes)</strong></td>
+                        <td><code><?php echo esc_html($model_seo_current); ?></code></td>
+                    </tr>
+
+                    <tr>
                         <td><strong>Llamadas texto por post</strong></td>
                         <td><code><?php echo esc_html((int)$text_calls); ?></code></td>
                     </tr>
                     <tr>
                         <td><strong>Llamadas imagen por post</strong></td>
                         <td><code><?php echo esc_html((int)$img_calls); ?></code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Llamadas SEO por post</strong></td>
+                        <td><code><?php echo esc_html((int)$seo_calls); ?></code></td>
                     </tr>
 
                     <tr>
@@ -612,6 +974,15 @@ if (!function_exists('cbia_render_tab_costes')) {
                     </tr>
 
                     <tr>
+                        <td><strong>Input tokens SEO (total post)</strong></td>
+                        <td><code><?php echo esc_html((int)$in_tokens_seo_total); ?></code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Output tokens SEO (total post)</strong></td>
+                        <td><code><?php echo esc_html((int)$out_tokens_seo_total); ?></code></td>
+                    </tr>
+
+                    <tr>
                         <td><strong>Coste estimado (TEXTO)</strong></td>
                         <td>
                             <?php
@@ -630,6 +1001,14 @@ if (!function_exists('cbia_render_tab_costes')) {
                                 ? '<span style="color:#b70000;">Modelo no encontrado en tabla</span>'
                                 : '<strong>' . esc_html(number_format((float)$eur_total_img, 4, ',', '.')) . ' €</strong> <span class="description">(in ' . number_format((float)$eur_in_img, 4, ',', '.') . ' € | out ' . number_format((float)$eur_out_img, 4, ',', '.') . ' €)</span>';
                             ?>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td><strong>Coste estimado (SEO)</strong></td>
+                        <td>
+                            <strong><?php echo esc_html(number_format((float)$eur_total_seo, 4, ',', '.')); ?> €</strong>
+                            <span class="description">(in <?php echo esc_html(number_format((float)$eur_in_seo, 4, ',', '.')); ?> € | out <?php echo esc_html(number_format((float)$eur_out_seo, 4, ',', '.')); ?> €)</span>
                         </td>
                     </tr>
 
@@ -686,6 +1065,14 @@ if (!function_exists('cbia_render_tab_costes')) {
                     </tr>
 
                     <tr>
+                        <th>Sobrecoste fijo por llamada TEXTO/SEO (USD)</th>
+                        <td>
+                            <input type="number" step="0.001" min="0" max="0.050" name="responses_fixed_usd_per_call" value="<?php echo esc_attr((string)$cost['responses_fixed_usd_per_call']); ?>" style="width:120px;" />
+                            <p class="description">Ajuste fino para cuadrar con el billing real (se aplica a cada llamada de texto/SEO).</p>
+                        </td>
+                    </tr>
+
+                    <tr>
                         <th>Multiplicador reintentos (texto)</th>
                         <td>
                             <input type="number" step="0.05" min="1" max="5" name="mult_text" value="<?php echo esc_attr((string)$cost['mult_text']); ?>" style="width:120px;" />
@@ -697,12 +1084,33 @@ if (!function_exists('cbia_render_tab_costes')) {
                             <input type="number" step="0.05" min="1" max="5" name="mult_image" value="<?php echo esc_attr((string)$cost['mult_image']); ?>" style="width:120px;" />
                         </td>
                     </tr>
+                    <tr>
+                        <th>Imágenes: usar precio fijo por generación</th>
+                        <td>
+                            <label><input type="checkbox" name="use_image_flat_pricing" value="1" <?php checked(!empty($cost['use_image_flat_pricing'])); ?> /> Activar (recomendado). Más cercano al billing real.</label>
+                            <p class="description">Si está activo, la estimación y el cálculo REAL usarán precio fijo por imagen, ignorando tokens de imagen.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Multiplicador reintentos (SEO)</th>
+                        <td>
+                            <input type="number" step="0.05" min="1" max="5" name="mult_seo" value="<?php echo esc_attr((string)$cost['mult_seo']); ?>" style="width:120px;" />
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <th>Ajuste multiplicador total (REAL)</th>
+                        <td>
+                            <input type="number" step="0.01" min="0.5" max="1.5" name="real_adjust_multiplier" value="<?php echo esc_attr((string)$cost['real_adjust_multiplier']); ?>" style="width:120px;" />
+                            <p class="description">Multiplica el total real. Útil para compensar pequeñas diferencias de conversión/rounding.</p>
+                        </td>
+                    </tr>
 
                     <tr>
                         <th>Nº llamadas de TEXTO por post</th>
                         <td>
                             <input type="number" min="1" max="20" name="text_calls_per_post" value="<?php echo esc_attr((int)$cost['text_calls_per_post']); ?>" style="width:120px;" />
-                            <p class="description">Si tu engine hace más de 1 llamada para el texto (por ejemplo: 2 pasos), súbelo aquí.</p>
+                            <p class="description">Si tu engine hace más de 1 llamada para el texto, súbelo aquí.</p>
                         </td>
                     </tr>
 
@@ -721,6 +1129,7 @@ if (!function_exists('cbia_render_tab_costes')) {
                                 <option value="gpt-image-1-mini" <?php selected($model_img_current, 'gpt-image-1-mini'); ?>>gpt-image-1-mini</option>
                                 <option value="gpt-image-1" <?php selected($model_img_current, 'gpt-image-1'); ?>>gpt-image-1</option>
                             </select>
+                            <p class="description">Precios fijos por imagen (USD): mini <input type="number" step="0.001" min="0" name="image_flat_usd_mini" value="<?php echo esc_attr((string)$cost['image_flat_usd_mini']); ?>" style="width:90px;" /> &nbsp;full <input type="number" step="0.001" min="0" name="image_flat_usd_full" value="<?php echo esc_attr((string)$cost['image_flat_usd_full']); ?>" style="width:90px;" /></p>
                         </td>
                     </tr>
 
@@ -728,7 +1137,47 @@ if (!function_exists('cbia_render_tab_costes')) {
                         <th>Output tokens por llamada de imagen (opcional)</th>
                         <td>
                             <input type="number" min="0" max="50000" name="image_output_tokens_per_call" value="<?php echo esc_attr((int)$cost['image_output_tokens_per_call']); ?>" style="width:120px;" />
-                            <p class="description">Si lo dejas en 0, la estimación de imagen contará básicamente el input (más conservador). Si quieres afinar, ajusta aquí.</p>
+                            <p class="description">Si lo dejas en 0, la estimación contará básicamente el input.</p>
+                        </td>
+                    </tr>
+
+                    <tr><th colspan="2"><hr/></th></tr>
+
+                    <tr>
+                        <th>Nº llamadas SEO por post</th>
+                        <td>
+                            <input type="number" min="0" max="20" name="seo_calls_per_post" value="<?php echo esc_attr((int)$cost['seo_calls_per_post']); ?>" style="width:120px;" />
+                            <p class="description">Si tu relleno Yoast/SEO hace llamadas a OpenAI (meta, keyphrase, etc), ponlas aquí para estimación.</p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <th>Modelo SEO</th>
+                        <td>
+                            <select name="seo_model" style="width:240px;">
+                                <?php
+                                $seo_candidates = array('gpt-4.1-mini','gpt-4.1','gpt-4.1-nano','gpt-5','gpt-5-mini','gpt-5-nano','gpt-5.1','gpt-5.2');
+                                foreach ($seo_candidates as $m) {
+                                    if (!isset($table[$m])) continue;
+                                    echo '<option value="' . esc_attr($m) . '" ' . selected($model_seo_current, $m, false) . '>' . esc_html($m) . '</option>';
+                                }
+                                ?>
+                            </select>
+                            <p class="description">Si no sabes, deja el mismo que el de texto.</p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <th>Input tokens por llamada SEO</th>
+                        <td>
+                            <input type="number" min="0" max="50000" name="seo_input_tokens_per_call" value="<?php echo esc_attr((int)$cost['seo_input_tokens_per_call']); ?>" style="width:120px;" />
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <th>Output tokens por llamada SEO</th>
+                        <td>
+                            <input type="number" min="0" max="50000" name="seo_output_tokens_per_call" value="<?php echo esc_attr((int)$cost['seo_output_tokens_per_call']); ?>" style="width:120px;" />
                         </td>
                     </tr>
                 </table>
@@ -764,6 +1213,7 @@ if (!function_exists('cbia_render_tab_costes')) {
 
                 <p>
                     <button type="submit" class="button button-primary" name="cbia_action" value="calc_last">Calcular</button>
+                    <button type="submit" class="button" name="cbia_action" value="calc_last_real" style="margin-left:8px;">Calcular SOLO real</button>
                     <button type="submit" class="button button-secondary" name="cbia_action" value="clear_log" style="margin-left:8px;">Limpiar log</button>
                 </p>
             </form>
@@ -780,7 +1230,11 @@ if (!function_exists('cbia_render_tab_costes')) {
                         .then(r => r.json())
                         .then(data => {
                             if(data && data.success && logBox){
-                                logBox.value = data.data || '';
+                                if (data.data && typeof data.data === 'object' && data.data.log) {
+                                    logBox.value = data.data.log || '';
+                                } else {
+                                    logBox.value = data.data || '';
+                                }
                                 logBox.scrollTop = logBox.scrollHeight;
                             }
                         })
@@ -791,164 +1245,6 @@ if (!function_exists('cbia_render_tab_costes')) {
             </script>
         </div>
         <?php
-    }
-}
-
-/* =========================================================
-   ======================= AJAX LOG =========================
-   ========================================================= */
-add_action('wp_ajax_cbia_get_costes_log', function () {
-    if (!current_user_can('manage_options')) wp_send_json_error('forbidden', 403);
-    wp_send_json_success(cbia_costes_log_get());
-});
-
-/* =========================================================
-   ============ CÁLCULO ÚLTIMOS POSTS (real/estimado) =======
-   ========================================================= */
-if (!function_exists('cbia_costes_calc_last_posts')) {
-    function cbia_costes_calc_last_posts($n, $only_cbia, $use_est_if_missing, $cost_settings, $cbia_settings) {
-        $n = max(1, min(200, (int)$n));
-
-        $args = array(
-            'post_type'      => 'post',
-            'posts_per_page' => $n,
-            'post_status'    => array('publish','future','draft','pending'),
-            'orderby'        => 'date',
-            'order'          => 'DESC',
-            'fields'         => 'ids',
-            'no_found_rows'  => true,
-        );
-
-        if ($only_cbia) {
-            $args['meta_query'] = array(
-                array('key' => '_cbia_created', 'value' => '1', 'compare' => '=')
-            );
-        }
-
-        $q = new WP_Query($args);
-        $ids = !empty($q->posts) ? $q->posts : array();
-        if (empty($ids)) return null;
-
-        $usd_to_eur = (float)$cost_settings['usd_to_eur'];
-        $cached_ratio = (float)$cost_settings['cached_input_ratio'];
-
-        $total_eur = 0.0;
-        $real_posts = 0;
-        $est_posts  = 0;
-
-        foreach ($ids as $post_id) {
-            $sum = cbia_costes_sum_usage_for_post($post_id);
-
-            if (is_array($sum)) {
-                // Si hay usage real: intentamos sumar por modelo, pero para simplificar:
-                // - si hay varios modelos, calculamos todo con el primero disponible en la tabla.
-                $models = isset($sum['models']) ? (array)$sum['models'] : array();
-                $table = cbia_costes_price_table_usd_per_million();
-
-                $model = '';
-                foreach ($models as $m) {
-                    if (isset($table[$m])) { $model = (string)$m; break; }
-                }
-                if ($model === '') {
-                    $model = (string)($cbia_settings['openai_model'] ?? 'gpt-4.1-mini');
-                }
-                if (!isset($table[$model])) {
-                    // si no está, intentamos estimación si está permitido
-                    if ($use_est_if_missing) {
-                        $est = cbia_costes_estimate_for_post($post_id, $cost_settings, $cbia_settings);
-                        if ($est !== null) { $total_eur += (float)$est; $est_posts++; }
-                    }
-                    continue;
-                }
-
-                $in_total  = (int)$sum['text_in'] + (int)$sum['image_in'];
-                $cin_total = (int)$sum['text_cin'] + (int)$sum['image_cin'];
-                $out_total = (int)$sum['text_out'] + (int)$sum['image_out'];
-
-                $ratio = 0.0;
-                if ($in_total > 0 && $cin_total > 0) {
-                    $ratio = min(1.0, max(0.0, $cin_total / (float)max(1,$in_total)));
-                } else {
-                    $ratio = $cached_ratio;
-                }
-
-                list($eur, $eur_in, $eur_out) = cbia_costes_calc_cost_eur($model, $in_total, $out_total, $usd_to_eur, $ratio);
-                if ($eur !== null) {
-                    $total_eur += (float)$eur;
-                    $real_posts++;
-                } else {
-                    if ($use_est_if_missing) {
-                        $est = cbia_costes_estimate_for_post($post_id, $cost_settings, $cbia_settings);
-                        if ($est !== null) { $total_eur += (float)$est; $est_posts++; }
-                    }
-                }
-
-            } else {
-                if ($use_est_if_missing) {
-                    $est = cbia_costes_estimate_for_post($post_id, $cost_settings, $cbia_settings);
-                    if ($est !== null) { $total_eur += (float)$est; $est_posts++; }
-                }
-            }
-        }
-
-        return array(
-            'posts' => count($ids),
-            'real_posts' => $real_posts,
-            'est_posts' => $est_posts,
-            'eur_total' => $total_eur,
-        );
-    }
-}
-
-if (!function_exists('cbia_costes_estimate_for_post')) {
-    function cbia_costes_estimate_for_post($post_id, $cost_settings, $cbia_settings) {
-        $table = cbia_costes_price_table_usd_per_million();
-
-        $title = get_the_title((int)$post_id);
-        if (!$title) $title = '{title}';
-
-        $model_text = (string)($cbia_settings['openai_model'] ?? 'gpt-4.1-mini');
-        if (!isset($table[$model_text])) $model_text = 'gpt-4.1-mini';
-
-        $model_img = (string)($cost_settings['image_model'] ?? 'gpt-image-1-mini');
-        if (!isset($table[$model_img])) $model_img = 'gpt-image-1-mini';
-
-        $text_calls = max(1, (int)($cost_settings['text_calls_per_post'] ?? 1));
-        $img_calls  = (int)($cost_settings['image_calls_per_post'] ?? 0);
-        if ($img_calls <= 0) {
-            $img_calls = isset($cbia_settings['images_limit']) ? (int)$cbia_settings['images_limit'] : 3;
-        }
-        $img_calls = max(0, min(20, $img_calls));
-
-        // TEXTO (por llamada)
-        $in_text  = cbia_costes_estimate_input_tokens($title, $cbia_settings, $cost_settings['tokens_per_word'], $cost_settings['input_overhead_tokens']);
-        $out_text = cbia_costes_estimate_output_tokens($cbia_settings, $cost_settings['tokens_per_word']);
-
-        $in_text  = (int)ceil($in_text  * (float)$cost_settings['mult_text']);
-        $out_text = (int)ceil($out_text * (float)$cost_settings['mult_text']);
-
-        $in_text_total  = $in_text  * $text_calls;
-        $out_text_total = $out_text * $text_calls;
-
-        list($eur_text, $eur_in_text, $eur_out_text) =
-            cbia_costes_calc_cost_eur($model_text, $in_text_total, $out_text_total, (float)$cost_settings['usd_to_eur'], (float)$cost_settings['cached_input_ratio']);
-        if ($eur_text === null) return null;
-
-        // IMAGEN (por llamada)
-        $in_img_per_call = cbia_costes_estimate_image_prompt_input_tokens_per_call($cbia_settings, $cost_settings['tokens_per_word'], $cost_settings['per_image_overhead_words']);
-        $out_img_per_call = max(0, (int)($cost_settings['image_output_tokens_per_call'] ?? 0));
-
-        $in_img_per_call  = (int)ceil($in_img_per_call  * (float)$cost_settings['mult_image']);
-        $out_img_per_call = (int)ceil($out_img_per_call * (float)$cost_settings['mult_image']);
-
-        $in_img_total  = $in_img_per_call  * $img_calls;
-        $out_img_total = $out_img_per_call * $img_calls;
-
-        list($eur_img, $eur_in_img, $eur_out_img) =
-            cbia_costes_calc_cost_eur($model_img, $in_img_total, $out_img_total, (float)$cost_settings['usd_to_eur'], (float)$cost_settings['cached_input_ratio']);
-        if ($eur_img === null) $eur_img = 0.0;
-
-        return (float)$eur_text + (float)$eur_img;
     }
 }
 

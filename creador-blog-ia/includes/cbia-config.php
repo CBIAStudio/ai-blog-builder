@@ -62,6 +62,28 @@ if (!function_exists('cbia_get_allowed_models_for_ui')) {
 	}
 }
 
+/* =========================================================
+   =================== IMAGEN IA: FORMATOS =================
+   ========================================================= */
+
+if (!function_exists('cbia_config_image_formats_catalog')) {
+	function cbia_config_image_formats_catalog(): array {
+		return [
+			'panoramic_1536x1024' => 'Panorámica (1536x1024)',
+			'banner_1536x1024'    => 'Banner (1536x1024, encuadre amplio + headroom 25–35%)',
+		];
+	}
+}
+
+if (!function_exists('cbia_config_sanitize_image_format')) {
+	function cbia_config_sanitize_image_format($value, $fallback_key): string {
+		$value = sanitize_key((string)$value);
+		$formats = cbia_config_image_formats_catalog();
+		if (isset($formats[$value])) return $value;
+		return sanitize_key((string)$fallback_key);
+	}
+}
+
 if (!function_exists('cbia_get_recommended_text_model')) {
 	function cbia_get_recommended_text_model(): string {
 		return 'gpt-4.1-mini';
@@ -134,6 +156,32 @@ add_action('admin_init', function () {
 		? cbia_sanitize_textarea_preserve_lines($_POST['prompt_img_faq'])
 		: (string)($settings['prompt_img_faq'] ?? '');
 
+	$post_language = isset($_POST['post_language'])
+		? sanitize_text_field(wp_unslash($_POST['post_language']))
+		: (string)($settings['post_language'] ?? 'español');
+	if ($post_language === '') $post_language = 'español';
+
+	$faq_heading_custom = isset($_POST['faq_heading_custom'])
+		? sanitize_text_field(wp_unslash($_POST['faq_heading_custom']))
+		: (string)($settings['faq_heading_custom'] ?? '');
+
+	// Formato de imagen por sección (UI) - nota: el engine fuerza intro=panorámica y resto=banner (como en v8.4)
+	$image_format_intro = isset($_POST['image_format_intro'])
+		? cbia_config_sanitize_image_format($_POST['image_format_intro'], 'panoramic_1536x1024')
+		: cbia_config_sanitize_image_format((string)($settings['image_format_intro'] ?? ''), 'panoramic_1536x1024');
+
+	$image_format_body = isset($_POST['image_format_body'])
+		? cbia_config_sanitize_image_format($_POST['image_format_body'], 'banner_1536x1024')
+		: cbia_config_sanitize_image_format((string)($settings['image_format_body'] ?? ''), 'banner_1536x1024');
+
+	$image_format_conclusion = isset($_POST['image_format_conclusion'])
+		? cbia_config_sanitize_image_format($_POST['image_format_conclusion'], 'banner_1536x1024')
+		: cbia_config_sanitize_image_format((string)($settings['image_format_conclusion'] ?? ''), 'banner_1536x1024');
+
+	$image_format_faq = isset($_POST['image_format_faq'])
+		? cbia_config_sanitize_image_format($_POST['image_format_faq'], 'banner_1536x1024')
+		: cbia_config_sanitize_image_format((string)($settings['image_format_faq'] ?? ''), 'banner_1536x1024');
+
 	$default_category = isset($_POST['default_category'])
 		? sanitize_text_field(wp_unslash($_POST['default_category']))
 		: (string)($settings['default_category'] ?? 'Noticias');
@@ -172,6 +220,12 @@ add_action('admin_init', function () {
 		'prompt_img_body'        => $prompt_img_body,
 		'prompt_img_conclusion'  => $prompt_img_conclusion,
 		'prompt_img_faq'         => $prompt_img_faq,
+		'post_language'          => $post_language,
+		'faq_heading_custom'     => $faq_heading_custom,
+		'image_format_intro'     => $image_format_intro,
+		'image_format_body'      => $image_format_body,
+		'image_format_conclusion'=> $image_format_conclusion,
+		'image_format_faq'       => $image_format_faq,
 		'default_category'       => $default_category,
 		'keywords_to_categories' => $keywords_to_categories,
 		'default_tags'           => $default_tags,
@@ -200,6 +254,13 @@ if (!function_exists('cbia_render_tab_config')) {
 		if (!isset($s['post_length_variant'])) $s['post_length_variant'] = 'medium';
 		if (!isset($s['images_limit'])) $s['images_limit'] = 3;
 		if (!isset($s['default_category'])) $s['default_category'] = 'Noticias';
+		if (!isset($s['post_language'])) $s['post_language'] = 'español';
+		if (!isset($s['faq_heading_custom'])) $s['faq_heading_custom'] = '';
+		// Formatos (UI). Nota: el engine fuerza intro=panorámica, resto=banner.
+		if (!isset($s['image_format_intro'])) $s['image_format_intro'] = 'panoramic_1536x1024';
+		if (!isset($s['image_format_body'])) $s['image_format_body'] = 'banner_1536x1024';
+		if (!isset($s['image_format_conclusion'])) $s['image_format_conclusion'] = 'banner_1536x1024';
+		if (!isset($s['image_format_faq'])) $s['image_format_faq'] = 'banner_1536x1024';
 		if (!isset($s['blocked_models']) || !is_array($s['blocked_models'])) $s['blocked_models'] = [];
 		if (!isset($s['default_author_id'])) $s['default_author_id'] = 0;
 
@@ -284,20 +345,85 @@ if (!function_exists('cbia_render_tab_config')) {
 		echo '<p class="description">Usa {title}. Marcadores: [IMAGEN: descripción].</p>';
 		echo '</td></tr>';
 
-		echo '<tr><th scope="row"><label>Prompts de imagen por sección</label></th><td>';
-		echo '<p class="description">Se guardan aquí y el motor los usa para orientar cada imagen.</p>';
+		echo '<tr><th scope="row"><label>Idioma del post</label></th><td>';
+		$language_options = [
+			'español'   => 'Español',
+			'portugués' => 'Portugués',
+			'inglés'    => 'Inglés',
+			'francés'   => 'Francés',
+			'italiano'  => 'Italiano',
+			'alemán'    => 'Alemán',
+		];
+		echo '<select name="post_language" style="width:220px;">';
+		foreach ($language_options as $val => $label) {
+			echo '<option value="' . esc_attr($val) . '" ' . selected($s['post_language'], $val, false) . '>' . esc_html($label) . '</option>';
+		}
+		echo '</select>';
+		echo '<p class="description">Se usa para {IDIOMA_POST} y para normalizar el título de “Preguntas frecuentes”.</p>';
+		echo '</td></tr>';
 
-		echo '<p><strong>Intro</strong></p>';
+		echo '<tr><th scope="row"><label>FAQ: título personalizado</label></th><td>';
+		echo '<input type="text" name="faq_heading_custom" value="' . esc_attr((string)$s['faq_heading_custom']) . '" style="width:420px;" />';
+		echo '<p class="description">Si lo rellenas, se fuerza este <code>&lt;h2&gt;</code> para la sección de FAQ.</p>';
+		echo '</td></tr>';
+
+
+		// Imagen IA (formato + prompt por sección)
+		$formats = cbia_config_image_formats_catalog();
+		echo '<tr><th scope="row"><label>Imagen IA (formato y prompt por sección)</label></th><td>';
+		echo '<p class="description">Nota: el plugin fuerza <strong>destacada/intro = panorámica</strong> y <strong>resto = banner</strong> (como en v8.4). Esta UI se guarda igualmente para mantener coherencia y poder ajustarlo en el futuro.</p>';
+
+		// INTRO
+		echo '<p style="margin:12px 0 6px;"><strong>Formato de imagen para Introducción (destacada)</strong></p>';
+		echo '<select name="image_format_intro" style="width:420px;">';
+		foreach ($formats as $k => $label) {
+			echo '<option value="' . esc_attr($k) . '" ' . selected($s['image_format_intro'], $k, false) . '>' . esc_html($label) . '</option>';
+		}
+		echo '</select>';
+		echo '<p class="description">Nota: el plugin fuerza: destacada = panorámica, resto = banner.</p>';
+
+		echo '<p style="margin:12px 0 6px;"><strong>Prompt de imagen para Introducción (destacada)</strong></p>';
 		echo '<textarea name="prompt_img_intro" rows="3" style="width:100%;">' . esc_textarea((string)($s['prompt_img_intro'] ?? '')) . '</textarea>';
+		echo '<p class="description">Se usa como base y se concatena con la descripción del marcador. Sin texto ni logos. En banner se refuerza headroom y márgenes.</p>';
 
-		echo '<p><strong>Cuerpo</strong></p>';
+		// CUERPO
+		echo '<p style="margin:16px 0 6px;"><strong>Formato de imagen para Cuerpo</strong></p>';
+		echo '<select name="image_format_body" style="width:420px;">';
+		foreach ($formats as $k => $label) {
+			echo '<option value="' . esc_attr($k) . '" ' . selected($s['image_format_body'], $k, false) . '>' . esc_html($label) . '</option>';
+		}
+		echo '</select>';
+		echo '<p class="description">Nota: el plugin fuerza: destacada = panorámica, resto = banner.</p>';
+
+		echo '<p style="margin:12px 0 6px;"><strong>Prompt de imagen para Cuerpo</strong></p>';
 		echo '<textarea name="prompt_img_body" rows="3" style="width:100%;">' . esc_textarea((string)($s['prompt_img_body'] ?? '')) . '</textarea>';
+		echo '<p class="description">Se usa como base y se concatena con la descripción del marcador. Sin texto ni logos. En banner se refuerza headroom y márgenes.</p>';
 
-		echo '<p><strong>Conclusión</strong></p>';
+		// CIERRE / CONCLUSIÓN
+		echo '<p style="margin:16px 0 6px;"><strong>Formato de imagen para Cierre</strong></p>';
+		echo '<select name="image_format_conclusion" style="width:420px;">';
+		foreach ($formats as $k => $label) {
+			echo '<option value="' . esc_attr($k) . '" ' . selected($s['image_format_conclusion'], $k, false) . '>' . esc_html($label) . '</option>';
+		}
+		echo '</select>';
+		echo '<p class="description">Nota: el plugin fuerza: destacada = panorámica, resto = banner.</p>';
+
+		echo '<p style="margin:12px 0 6px;"><strong>Prompt de imagen para Cierre</strong></p>';
 		echo '<textarea name="prompt_img_conclusion" rows="3" style="width:100%;">' . esc_textarea((string)($s['prompt_img_conclusion'] ?? '')) . '</textarea>';
+		echo '<p class="description">Se usa como base y se concatena con la descripción del marcador. Sin texto ni logos. En banner se refuerza headroom y márgenes.</p>';
 
-		echo '<p><strong>FAQ</strong></p>';
+		// FAQ
+		echo '<p style="margin:16px 0 6px;"><strong>Formato de imagen para FAQ</strong></p>';
+		echo '<select name="image_format_faq" style="width:420px;">';
+		foreach ($formats as $k => $label) {
+			echo '<option value="' . esc_attr($k) . '" ' . selected($s['image_format_faq'], $k, false) . '>' . esc_html($label) . '</option>';
+		}
+		echo '</select>';
+		echo '<p class="description">Nota: el plugin fuerza: destacada = panorámica, resto = banner.</p>';
+
+		echo '<p style="margin:12px 0 6px;"><strong>Prompt de imagen para FAQ</strong></p>';
 		echo '<textarea name="prompt_img_faq" rows="3" style="width:100%;">' . esc_textarea((string)($s['prompt_img_faq'] ?? '')) . '</textarea>';
+		echo '<p class="description">Se usa como base y se concatena con la descripción del marcador. Sin texto ni logos. En banner se refuerza headroom y márgenes.</p>';
 
 		echo '</td></tr>';
 
