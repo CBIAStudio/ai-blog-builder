@@ -401,6 +401,22 @@ if (!has_action('wp_ajax_cbia_get_log')) {
 }
 
 /* =========================================================
+   =================== AJAX: CHECKPOINT STATUS =============
+   ========================================================= */
+if (!has_action('wp_ajax_cbia_get_checkpoint_status')) {
+    add_action('wp_ajax_cbia_get_checkpoint_status', function () {
+        if (!current_user_can('manage_options')) wp_send_json_error('forbidden', 403);
+        nocache_headers();
+        $cp = cbia_checkpoint_get();
+        $status = (!empty($cp) && !empty($cp['running']))
+            ? ('EN CURSO | idx '.intval($cp['idx'] ?? 0).' de '.count((array)($cp['queue'] ?? array())))
+            : 'inactivo';
+        $last_dt = cbia_get_last_scheduled_at() ?: '(sin registros)';
+        wp_send_json_success(array('status' => $status, 'last' => $last_dt));
+    });
+}
+
+/* =========================================================
    =================== AJAX: START GENERATION ==============
    ========================================================= */
 add_action('wp_ajax_cbia_start_generation', function () {
@@ -610,8 +626,8 @@ if (!function_exists('cbia_render_tab_blog')) {
         <hr/>
 
         <h2>Estado del checkpoint</h2>
-        <p><strong><?php echo esc_html($cp_status); ?></strong></p>
-        <p><strong>Última programada/publicada:</strong> <code><?php echo esc_html($last_dt); ?></code></p>
+        <p><strong id="cbia_cp_status"><?php echo esc_html($cp_status); ?></strong></p>
+        <p><strong>Última programada/publicada:</strong> <code id="cbia_cp_last"><?php echo esc_html($last_dt); ?></code></p>
 
         <hr/>
 
@@ -674,6 +690,24 @@ if (!function_exists('cbia_render_tab_blog')) {
                     .catch(()=>{});
             }
             setInterval(refreshLog, 3000);
+            refreshLog();
+
+            const cpStatus = document.getElementById('cbia_cp_status');
+            const cpLast = document.getElementById('cbia_cp_last');
+
+            function refreshCheckpoint(){
+                if (typeof ajaxurl === 'undefined') return;
+                fetch(ajaxurl + '?action=cbia_get_checkpoint_status', { credentials:'same-origin' })
+                    .then(r => r.json())
+                    .then(data => {
+                        if (!data || !data.success || !data.data) return;
+                        if (cpStatus) cpStatus.textContent = data.data.status || '';
+                        if (cpLast) cpLast.textContent = data.data.last || '';
+                    })
+                    .catch(()=>{});
+            }
+            setInterval(refreshCheckpoint, 5000);
+            refreshCheckpoint();
 
             const btn = document.getElementById('cbia_btn_generate');
             if(btn){
