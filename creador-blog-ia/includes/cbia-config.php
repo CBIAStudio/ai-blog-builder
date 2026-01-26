@@ -156,6 +156,12 @@ add_action('admin_init', function () {
 		? cbia_sanitize_textarea_preserve_lines($_POST['prompt_img_faq'])
 		: (string)($settings['prompt_img_faq'] ?? '');
 
+	$responses_max_output_tokens = isset($_POST['responses_max_output_tokens'])
+		? (int)$_POST['responses_max_output_tokens']
+		: (int)($settings['responses_max_output_tokens'] ?? 6000);
+	if ($responses_max_output_tokens < 1500) $responses_max_output_tokens = 1500;
+	if ($responses_max_output_tokens > 12000) $responses_max_output_tokens = 12000;
+
 	$post_language = isset($_POST['post_language'])
 		? sanitize_text_field(wp_unslash($_POST['post_language']))
 		: (string)($settings['post_language'] ?? 'español');
@@ -220,6 +226,7 @@ add_action('admin_init', function () {
 		'prompt_img_body'        => $prompt_img_body,
 		'prompt_img_conclusion'  => $prompt_img_conclusion,
 		'prompt_img_faq'         => $prompt_img_faq,
+		'responses_max_output_tokens' => $responses_max_output_tokens,
 		'post_language'          => $post_language,
 		'faq_heading_custom'     => $faq_heading_custom,
 		'image_format_intro'     => $image_format_intro,
@@ -256,6 +263,7 @@ if (!function_exists('cbia_render_tab_config')) {
 		if (!isset($s['default_category'])) $s['default_category'] = 'Noticias';
 		if (!isset($s['post_language'])) $s['post_language'] = 'español';
 		if (!isset($s['faq_heading_custom'])) $s['faq_heading_custom'] = '';
+		if (!isset($s['responses_max_output_tokens'])) $s['responses_max_output_tokens'] = 6000;
 		// Formatos (UI). Nota: el engine fuerza intro=panorámica, resto=banner.
 		if (!isset($s['image_format_intro'])) $s['image_format_intro'] = 'panoramic_1536x1024';
 		if (!isset($s['image_format_body'])) $s['image_format_body'] = 'banner_1536x1024';
@@ -319,6 +327,11 @@ if (!function_exists('cbia_render_tab_config')) {
 		echo '<tr><th scope="row"><label>Temperature</label></th><td>';
 		echo '<input type="text" name="openai_temperature" value="' . esc_attr((string)$s['openai_temperature']) . '" style="width:120px;" />';
 		echo '<p class="description">Rango recomendado: 0.0 a 1.0 (máx 2.0).</p>';
+		echo '</td></tr>';
+
+		echo '<tr><th scope="row"><label>Max output tokens</label></th><td>';
+		echo '<input type="number" min="1500" max="12000" name="responses_max_output_tokens" value="' . esc_attr((string)$s['responses_max_output_tokens']) . '" style="width:120px;" />';
+		echo '<p class="description">Sube este valor si el texto sale cortado. Recomendado 6000–8000.</p>';
 		echo '</td></tr>';
 
 		echo '<tr><th scope="row"><label>Longitud de post</label></th><td>';

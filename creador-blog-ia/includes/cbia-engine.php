@@ -626,11 +626,15 @@ if (!function_exists('cbia_openai_responses_call')) {
 
 				cbia_log("OpenAI Responses: modelo={$model} intento {$t}/{$tries} " . ($title_for_log ? "| '{$title_for_log}'" : ''), 'INFO');
 
+				$max_out = (int)($s['responses_max_output_tokens'] ?? 6000);
+				if ($max_out < 1500) $max_out = 1500;
+				if ($max_out > 12000) $max_out = 12000;
+
 				$payload = [
 					'model' => $model,
 					'input' => $input,
 					// Max output prudente (luego el prompt manda)
-					'max_output_tokens' => (int)($s['responses_max_output_tokens'] ?? 4000),
+					'max_output_tokens' => $max_out,
 				];
 
 				$resp = wp_remote_post('https://api.openai.com/v1/responses', [
@@ -999,7 +1003,7 @@ if (!function_exists('cbia_normalize_faq_heading')) {
 			$target = $map[$lang] ?? 'Preguntas frecuentes';
 		}
 
-		$pattern = '/<h2\b[^>]*>\s*(preguntas\s+frecuentes|faq|frequently\s+asked\s+questions|perguntas\s+frequentes|questions\s+fréquentes|domande\s+frequenti|häufig\s+gestellte\s+fragen)\s*<\/h2>/iu';
+		$pattern = '/<h2\b[^>]*>\s*(preguntas\s+frecuentes|faq|frequently\s+asked\s+questions|perguntas\s+frequentes|questions\s+fréquentes|domande\s+frequenti|häufig\s+gestellte\s+fragen)(?:\s*[\:\-\–\—]?\s*(?:\([^)]*\))?)?\s*<\/h2>/iu';
 		$replacement = '<h2>' . esc_html($target) . '</h2>';
 
 		$new = preg_replace($pattern, $replacement, (string)$html, 1);

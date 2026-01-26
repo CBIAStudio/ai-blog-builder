@@ -115,6 +115,7 @@ if (!function_exists('cbia_get_default_settings')) {
 			'prompt_img_faq'        => '',
 			'post_language'         => 'español',
 			'faq_heading_custom'    => '',
+			'responses_max_output_tokens' => 6000,
 
 			// Categorías/Tags
 			'default_category'      => 'Noticias',
