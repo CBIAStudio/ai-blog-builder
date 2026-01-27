@@ -752,6 +752,7 @@ if (!function_exists('cbia_render_tab_costes')) {
         if ($model_seo_current === '' || !isset($table[$model_seo_current])) $model_seo_current = $model_text_current;
 
         $notice = '';
+        $calibration_info = null;
 
         /* ===== Handle POST ===== */
         if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -884,6 +885,45 @@ if (!function_exists('cbia_render_tab_costes')) {
                     }
                     $notice = 'calc';
                 }
+                if ($action === 'calibrate_real') {
+                    $n = isset($u['calc_last_n']) ? (int)$u['calc_last_n'] : 20;
+                    $n = max(1, min(200, $n));
+
+                    $only_cbia = !empty($u['calc_only_cbia']) ? true : false;
+
+                    $actual_eur = isset($u['calibrate_actual_eur'])
+                        ? (float)str_replace(',', '.', (string)$u['calibrate_actual_eur'])
+                        : 0.0;
+
+                    $sum = cbia_costes_calc_last_posts($n, $only_cbia, false, $cost, $cbia);
+
+                    if ($sum && $actual_eur > 0 && (float)$sum['eur_total'] > 0) {
+                        $suggested = $actual_eur / (float)$sum['eur_total'];
+                        $suggested = max(0.50, min(1.50, (float)$suggested));
+
+                        $cost['real_adjust_multiplier'] = (float)$suggested;
+                        update_option(cbia_costes_settings_key(), $cost);
+
+                        $calibration_info = array(
+                            'n' => $n,
+                            'only_cbia' => $only_cbia ? 1 : 0,
+                            'actual_eur' => (float)$actual_eur,
+                            'estimated_eur' => (float)$sum['eur_total'],
+                            'suggested' => (float)$suggested,
+                        );
+
+                        cbia_costes_log(
+                            "Calibración REAL últimos {$n}: real_calc€=" . number_format((float)$sum['eur_total'], 4, ',', '.') .
+                            " billing€=" . number_format((float)$actual_eur, 4, ',', '.') .
+                            " -> multiplier=" . number_format((float)$suggested, 4, ',', '.')
+                        );
+
+                        $notice = 'saved';
+                    } else {
+                        cbia_costes_log("Calibración REAL últimos {$n}: datos insuficientes (billing o total real <= 0).");
+                        $notice = 'calc';
+                    }
+                }
             }
         }
 
@@ -900,6 +940,17 @@ if (!function_exists('cbia_render_tab_costes')) {
         $model_seo_current = (string)($cost['seo_model'] ?? '');
         if ($model_seo_current === '' || !isset($table[$model_seo_current])) $model_seo_current = $model_text_current;
 
+        // Ajuste efectivo aplicado ahora mismo (UX: hacerlo visible)
+        $applied_mult = (float)($cost['real_adjust_multiplier'] ?? 1.0);
+        $applied_source = 'global';
+        if ($applied_mult <= 0) $applied_mult = 1.0;
+        if ($applied_mult == 1.0 && function_exists('cbia_costes_get_model_multiplier')) {
+            $model_mult = (float)cbia_costes_get_model_multiplier($model_text_current, $cost);
+            if ($model_mult > 0 && $model_mult != 1.0) {
+                $applied_mult = $model_mult;
+                $applied_source = 'modelo';
+            }
+        }
         // llamadas por post
         $text_calls = max(1, (int)$cost['text_calls_per_post']);
         $img_calls  = (int)$cost['image_calls_per_post'];
@@ -976,9 +1027,26 @@ if (!function_exists('cbia_render_tab_costes')) {
             echo '<div class="notice notice-success is-dismissible"><p>Cálculo ejecutado. Revisa el log.</p></div>';
         }
 
-        ?>
+        if (is_array($calibration_info)) {
+            echo '<div class="notice notice-success is-dismissible"><p><strong>Calibración aplicada.</strong> ' .
+                'Billing: ' . esc_html(number_format((float)$calibration_info['actual_eur'], 4, ',', '.')) . ' € | ' .
+                'Real calculado: ' . esc_html(number_format((float)$calibration_info['estimated_eur'], 4, ',', '.')) . ' € | ' .
+                'Multiplicador: <code>' . esc_html(number_format((float)$calibration_info['suggested'], 4, ',', '.')) . '</code></p></div>';
+        }
+?>
         <div class="wrap" style="padding-left:0;">
             <h2>Costes</h2>
+            <div class="notice notice-info" style="margin:8px 0 16px 0;">
+                <p style="margin:6px 0;">
+                    <strong>Ajuste REAL efectivo:</strong>
+                    <code><?php echo esc_html(number_format((float)$applied_mult, 4, ',', '.')); ?>×</code>
+                    <?php if ($applied_source === 'modelo') : ?>
+                        <span class="description">(por modelo: <?php echo esc_html($model_text_current); ?>)</span>
+                    <?php else : ?>
+                        <span class="description">(por ajuste global)</span>
+                    <?php endif; ?>
+                </p>
+            </div>
 
             <h3>Estimación rápida (según Config actual)</h3>
             <table class="widefat striped" style="max-width:980px;">
@@ -998,7 +1066,6 @@ if (!function_exists('cbia_render_tab_costes')) {
                         <td><strong>Modelo SEO (Costes)</strong></td>
                         <td><code><?php echo esc_html($model_seo_current); ?></code></td>
                     </tr>
-
                     <tr>
                         <td><strong>Llamadas texto por post</strong></td>
                         <td><code><?php echo esc_html((int)$text_calls); ?></code></td>
@@ -1011,7 +1078,6 @@ if (!function_exists('cbia_render_tab_costes')) {
                         <td><strong>Llamadas SEO por post</strong></td>
                         <td><code><?php echo esc_html((int)$seo_calls); ?></code></td>
                     </tr>
-
                     <tr>
                         <td><strong>Input tokens TEXTO (total post)</strong></td>
                         <td><code><?php echo esc_html((int)$in_tokens_text_total); ?></code></td>
@@ -1020,7 +1086,6 @@ if (!function_exists('cbia_render_tab_costes')) {
                         <td><strong>Output tokens TEXTO (total post)</strong></td>
                         <td><code><?php echo esc_html((int)$out_tokens_text_total); ?></code></td>
                     </tr>
-
                     <tr>
                         <td><strong>Input tokens IMAGEN (total post)</strong></td>
                         <td><code><?php echo esc_html((int)$in_tokens_img_total); ?></code></td>
@@ -1029,7 +1094,6 @@ if (!function_exists('cbia_render_tab_costes')) {
                         <td><strong>Output tokens IMAGEN (total post)</strong></td>
                         <td><code><?php echo esc_html((int)$out_tokens_img_total); ?></code> <span class="description">(si lo dejas a 0, solo estimamos input)</span></td>
                     </tr>
-
                     <tr>
                         <td><strong>Input tokens SEO (total post)</strong></td>
                         <td><code><?php echo esc_html((int)$in_tokens_seo_total); ?></code></td>
@@ -1038,7 +1102,6 @@ if (!function_exists('cbia_render_tab_costes')) {
                         <td><strong>Output tokens SEO (total post)</strong></td>
                         <td><code><?php echo esc_html((int)$out_tokens_seo_total); ?></code></td>
                     </tr>
-
                     <tr>
                         <td><strong>Coste estimado (TEXTO)</strong></td>
                         <td>
@@ -1049,7 +1112,6 @@ if (!function_exists('cbia_render_tab_costes')) {
                             ?>
                         </td>
                     </tr>
-
                     <tr>
                         <td><strong>Coste estimado (IMÁGENES)</strong></td>
                         <td>
@@ -1060,7 +1122,6 @@ if (!function_exists('cbia_render_tab_costes')) {
                             ?>
                         </td>
                     </tr>
-
                     <tr>
                         <td><strong>Coste estimado (SEO)</strong></td>
                         <td>
@@ -1068,7 +1129,6 @@ if (!function_exists('cbia_render_tab_costes')) {
                             <span class="description">(in <?php echo esc_html(number_format((float)$eur_in_seo, 4, ',', '.')); ?> € | out <?php echo esc_html(number_format((float)$eur_out_seo, 4, ',', '.')); ?> €)</span>
                         </td>
                     </tr>
-
                     <tr>
                         <td><strong>Coste total estimado</strong></td>
                         <td>
@@ -1120,7 +1180,6 @@ if (!function_exists('cbia_render_tab_costes')) {
                             <input type="number" step="0.05" min="0" max="1" name="cached_input_ratio" value="<?php echo esc_attr((string)$cost['cached_input_ratio']); ?>" style="width:120px;" />
                         </td>
                     </tr>
-
                     <tr>
                         <th>Sobrecoste fijo por llamada TEXTO/SEO (USD)</th>
                         <td>
@@ -1128,7 +1187,6 @@ if (!function_exists('cbia_render_tab_costes')) {
                             <p class="description">Ajuste fino para cuadrar con el billing real (se aplica a cada llamada de texto/SEO).</p>
                         </td>
                     </tr>
-
                     <tr>
                         <th>Multiplicador reintentos (texto)</th>
                         <td>
@@ -1154,7 +1212,6 @@ if (!function_exists('cbia_render_tab_costes')) {
                             <input type="number" step="0.05" min="1" max="5" name="mult_seo" value="<?php echo esc_attr((string)$cost['mult_seo']); ?>" style="width:120px;" />
                         </td>
                     </tr>
-
                     <tr>
                         <th>Ajuste multiplicador total (REAL)</th>
                         <td>
@@ -1162,7 +1219,6 @@ if (!function_exists('cbia_render_tab_costes')) {
                             <p class="description">Multiplica el total real. Útil para compensar pequeñas diferencias de conversión/rounding.</p>
                         </td>
                     </tr>
-
                     <tr>
                         <th>Nº llamadas de TEXTO por post</th>
                         <td>
@@ -1170,7 +1226,6 @@ if (!function_exists('cbia_render_tab_costes')) {
                             <p class="description">Si tu engine hace más de 1 llamada para el texto, súbelo aquí.</p>
                         </td>
                     </tr>
-
                     <tr>
                         <th>Nº llamadas de IMAGEN por post</th>
                         <td>
@@ -1178,7 +1233,6 @@ if (!function_exists('cbia_render_tab_costes')) {
                             <p class="description">Si pones 0, se usa <code>images_limit</code> de Config.</p>
                         </td>
                     </tr>
-
                     <tr>
                         <th>Modelo de imagen</th>
                         <td>
@@ -1189,7 +1243,6 @@ if (!function_exists('cbia_render_tab_costes')) {
                             <p class="description">Precios fijos por imagen (USD): mini <input type="number" step="0.001" min="0" name="image_flat_usd_mini" value="<?php echo esc_attr((string)$cost['image_flat_usd_mini']); ?>" style="width:90px;" /> &nbsp;full <input type="number" step="0.001" min="0" name="image_flat_usd_full" value="<?php echo esc_attr((string)$cost['image_flat_usd_full']); ?>" style="width:90px;" /></p>
                         </td>
                     </tr>
-
                     <tr>
                         <th>Output tokens por llamada de imagen (opcional)</th>
                         <td>
@@ -1197,9 +1250,7 @@ if (!function_exists('cbia_render_tab_costes')) {
                             <p class="description">Si lo dejas en 0, la estimación contará básicamente el input.</p>
                         </td>
                     </tr>
-
                     <tr><th colspan="2"><hr/></th></tr>
-
                     <tr>
                         <th>Nº llamadas SEO por post</th>
                         <td>
@@ -1207,7 +1258,6 @@ if (!function_exists('cbia_render_tab_costes')) {
                             <p class="description">Si tu relleno Yoast/SEO hace llamadas a OpenAI (meta, keyphrase, etc), ponlas aquí para estimación.</p>
                         </td>
                     </tr>
-
                     <tr>
                         <th>Modelo SEO</th>
                         <td>
@@ -1223,14 +1273,12 @@ if (!function_exists('cbia_render_tab_costes')) {
                             <p class="description">Si no sabes, deja el mismo que el de texto.</p>
                         </td>
                     </tr>
-
                     <tr>
                         <th>Input tokens por llamada SEO</th>
                         <td>
                             <input type="number" min="0" max="50000" name="seo_input_tokens_per_call" value="<?php echo esc_attr((int)$cost['seo_input_tokens_per_call']); ?>" style="width:120px;" />
                         </td>
                     </tr>
-
                     <tr>
                         <th>Output tokens por llamada SEO</th>
                         <td>
@@ -1266,11 +1314,19 @@ if (!function_exists('cbia_render_tab_costes')) {
                             </label>
                         </td>
                     </tr>
+                    <tr>
+                        <th>Calibrar con billing real (€)</th>
+                        <td>
+                            <input type="number" name="calibrate_actual_eur" step="0.01" min="0" placeholder="Ej: 1.84" style="width:120px;" />
+                            <span class="description" style="margin-left:8px;">Introduce el gasto real para esos N posts y ajustamos el multiplicador REAL automáticamente.</span>
+                        </td>
+                    </tr>
                 </table>
 
                 <p>
                     <button type="submit" class="button button-primary" name="cbia_action" value="calc_last">Calcular</button>
                     <button type="submit" class="button" name="cbia_action" value="calc_last_real" style="margin-left:8px;">Calcular SOLO real</button>
+                    <button type="submit" class="button button-secondary" name="cbia_action" value="calibrate_real" style="margin-left:8px;">Calibrar REAL desde billing</button>
                     <button type="submit" class="button button-secondary" name="cbia_action" value="clear_log" style="margin-left:8px;">Limpiar log</button>
                 </p>
             </form>
@@ -1306,6 +1362,4 @@ if (!function_exists('cbia_render_tab_costes')) {
 }
 
 /* ------------------------- FIN includes/cbia-costes.php ------------------------- */
-
-
 
