@@ -1406,6 +1406,15 @@ if (!function_exists('cbia_create_single_blog_post')) {
 		);
 		if (!$ok) {
 			cbia_log("Fallo texto '{$title}': " . ($err ?: 'desconocido'), 'ERROR');
+			// Si OpenAI devolvió usage pero no hay post, deja rastro en el log de costes.
+			if (function_exists('cbia_costes_log')) {
+				$uin  = (int)($usage['input_tokens'] ?? 0);
+				$uout = (int)($usage['output_tokens'] ?? 0);
+				$umod = (string)($model_used ?? '');
+				if ($uin > 0 || $uout > 0) {
+					cbia_costes_log("Uso sin post (fallo texto) title='{$title}' model={$umod} in={$uin} out={$uout} err=" . (string)($err ?: ''));
+				}
+			}
 			return ['ok'=>false,'post_id'=>0,'error'=>$err ?: 'Fallo texto'];
 		}
 
@@ -1498,6 +1507,13 @@ if (!function_exists('cbia_create_single_blog_post')) {
 		list($wp_ok, $post_id, $wp_err) = cbia_create_post_in_wp_engine($title, $text_html, $featured_attach_id, $post_date_mysql);
 		if (!$wp_ok) {
 			cbia_log("Fallo creando post WP '{$title}': {$wp_err}", 'ERROR');
+			// Si hubo llamada a OpenAI pero falla WP, al menos deja rastro en el log de costes.
+			if (function_exists('cbia_costes_log')) {
+				$uin  = (int)($usage['input_tokens'] ?? 0);
+				$uout = (int)($usage['output_tokens'] ?? 0);
+				$umod = (string)($model_used ?? '');
+				cbia_costes_log("Uso sin post (fallo WP) title='{$title}' model={$umod} in={$uin} out={$uout}");
+			}
 			return ['ok'=>false,'post_id'=>0,'error'=>$wp_err ?: 'Fallo WP'];
 		}
 

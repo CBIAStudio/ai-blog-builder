@@ -33,8 +33,59 @@ if (!defined('ABSPATH')) exit;
 if (!function_exists('cbia_oldposts_log_key')) {
     function cbia_oldposts_log_key() { return 'cbia_oldposts_log'; }
 }
+if (!function_exists('cbia_oldposts_fix_mojibake')) {
+    /**
+     * Corrige mojibake común en mensajes de log sin tocar la lógica.
+     */
+    function cbia_oldposts_fix_mojibake($text) {
+        $text = (string)$text;
+        if ($text === '') return $text;
+
+        // Reemplazos directos de los casos más frecuentes en este plugin.
+        $map = array(
+            'tÃƒÂ­tulo' => 'título',
+            'TÃƒÂ­tulo' => 'Título',
+            'cambiÃƒÂ³' => 'cambió',
+            'devolviÃƒÂ³' => 'devolvió',
+            'invÃƒÂ¡lido' => 'inválido',
+            'ImÃƒÂ¡genes' => 'Imágenes',
+            'imÃƒÂ¡genes' => 'imágenes',
+            'CategorÃƒÂ­as' => 'Categorías',
+            'categorÃƒÂ­as' => 'categorías',
+            'acciÃƒÂ³n' => 'acción',
+            'acciÃƒÂ³n' => 'acción',
+            'Ã¢â‚¬Â¦' => '…',
+            'Ã¢â‚¬Å“' => '“',
+            'Ã¢â‚¬Â�' => '”',
+            'Ã¢â‚¬â€œ' => '–',
+            'Ã¢â‚¬â€�' => '—',
+            'ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬' => '€',
+            'ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€ ' => '≈',
+            'Â·' => '·',
+        );
+
+        $fixed = strtr($text, $map);
+
+        // Intento adicional: UTF-8 leído como Latin-1/Windows-1252.
+        if (function_exists('mb_convert_encoding') && preg_match('/[ÃÂâ]/', $fixed)) {
+            $try = @mb_convert_encoding($fixed, 'UTF-8', 'Windows-1252');
+            if (is_string($try) && $try !== '') {
+                $fixed = $try;
+            }
+        }
+
+        return $fixed;
+    }
+}
 if (!function_exists('cbia_oldposts_log_message')) {
     function cbia_oldposts_log_message($message) {
+        $message = cbia_oldposts_fix_mojibake($message);
+        // Evita duplicados consecutivos (muy útil con mojibake/lineas repetidas).
+        static $last_message = null;
+        if ($last_message !== null && (string)$last_message === (string)$message) {
+            return;
+        }
+        $last_message = (string)$message;
         if (function_exists('cbia_log')) {
             cbia_log('[OLDPOSTS] ' . (string)$message, 'INFO');
             return;
@@ -65,6 +116,14 @@ if (!function_exists('cbia_oldposts_get_log')) {
     }
 }
 
+/* =========================================================
+   =================== IMAGENES: RESET ======================
+   ========================================================= */
+/* Encabezado limpio; el siguiente quedó dañado por encoding. */
+/* =========================================================
+   ================= CATEGORIAS / ETIQUETAS =================
+   ========================================================= */
+/* (Comentario duplicado para legibilidad; el siguiente está dañado por encoding) */
 /* =========================================================
    =================== STOP FLAG (fallback) =================
    ========================================================= */
@@ -102,6 +161,23 @@ if (!function_exists('cbia_oldposts_sanitize_ymd')) {
         $ymd = preg_replace('/[^0-9\-]/', '', (string)$ymd);
         if (preg_match('/^\d{4}\-\d{2}\-\d{2}$/', $ymd)) return $ymd;
         return '';
+    }
+}
+if (!function_exists('cbia_oldposts_parse_ids_csv')) {
+    /**
+     * Convierte "1,2, 3\n4" en [1,2,3,4]
+     */
+    function cbia_oldposts_parse_ids_csv($raw) {
+        $raw = (string)$raw;
+        if ($raw === '') return array();
+        $raw = str_replace(array("\r", "\n", "\t", ";"), ',', $raw);
+        $parts = array_filter(array_map('trim', explode(',', $raw)));
+        $ids = array();
+        foreach ($parts as $p) {
+            $id = (int)$p;
+            if ($id > 0) $ids[$id] = $id;
+        }
+        return array_values($ids);
     }
 }
 if (!function_exists('cbia_oldposts_remove_h1')) {
@@ -167,7 +243,7 @@ if (!function_exists('cbia_oldposts_generate_meta_description_fallback')) {
         $base = cbia_oldposts_first_paragraph_text((string)$content);
         $t = trim(wp_strip_all_tags((string)$title));
         if ($t !== '') {
-            $pattern = '/^' . preg_quote($t, '/') . '\s*[:\-–—]?\s*/iu';
+            $pattern = '/^' . preg_quote($t, '/') . '\s*[:\-Ã¢â‚¬â€œÃ¢â‚¬â€�]?\s*/iu';
             $base = preg_replace($pattern, '', $base);
         }
         $desc = trim(mb_substr((string)$base, 0, 155));
@@ -184,7 +260,7 @@ if (!function_exists('cbia_oldposts_generate_focus_keyphrase_fallback')) {
 if (!function_exists('cbia_oldposts_generate_yoast_title_fallback')) {
     function cbia_oldposts_generate_yoast_title_fallback($title) {
         $t = trim(wp_strip_all_tags((string)$title));
-        // Yoast title suele aceptar variables, pero aquí dejamos un título simple.
+        // Yoast title suele aceptar variables, pero aquÃƒÂ­ dejamos un tÃƒÂ­tulo simple.
         return $t;
     }
 }
@@ -234,7 +310,7 @@ if (!function_exists('cbia_oldposts_recalc_yoast_fields')) {
         if ($do_title) {
             $yt = get_post_meta($post_id, '_yoast_wpseo_title', true);
             if ($force || $yt === '' || $yt === null) {
-                // Si tienes una función propia, úsala; si no, fallback
+                // Si tienes una funciÃƒÂ³n propia, ÃƒÂºsala; si no, fallback
                 if (function_exists('cbia_generate_yoast_title')) {
                     $new_yt = cbia_generate_yoast_title($title, $content);
                 } else {
@@ -317,13 +393,14 @@ if (!function_exists('cbia_oldposts_add_updated_note')) {
         update_post_meta($post_id, '_cbia_updated_note_date', $date_ymd);
         update_post_meta($post_id, '_cbia_oldposts_note_added', current_time('mysql'));
         cbia_oldposts_log_message("Nota añadida en post {$post_id} ({$date_ymd}).");
+        cbia_oldposts_log_message("Nota aÃƒÂ±adida en post {$post_id} ({$date_ymd}).");
 
         return true;
     }
 }
 
 /* =========================================================
-   ================= CATEGORÍAS / ETIQUETAS =================
+   ================= CATEGORÃƒÂ�AS / ETIQUETAS =================
    ========================================================= */
 if (!function_exists('cbia_oldposts_parse_keywords_to_categories')) {
     function cbia_oldposts_parse_keywords_to_categories($raw) {
@@ -366,7 +443,7 @@ if (!function_exists('cbia_oldposts_ensure_category_id')) {
 if (!function_exists('cbia_oldposts_assign_categories_only')) {
     function cbia_oldposts_assign_categories_only($post_id, $title, $content_html, $force=false) {
         if (!function_exists('cbia_get_settings')) {
-            cbia_oldposts_log_message("[WARN] No existe cbia_get_settings(). No se pueden aplicar categorías dinámicas.");
+            cbia_oldposts_log_message("[WARN] No existe cbia_get_settings(). No se pueden aplicar categorÃƒÂ­as dinÃƒÂ¡micas.");
             return false;
         }
 
@@ -420,7 +497,7 @@ if (!function_exists('cbia_oldposts_assign_categories_only')) {
 if (!function_exists('cbia_oldposts_assign_tags_only')) {
     function cbia_oldposts_assign_tags_only($post_id, $title, $content_html, $force=false) {
         if (!function_exists('cbia_get_settings')) {
-            cbia_oldposts_log_message("[WARN] No existe cbia_get_settings(). No se pueden aplicar etiquetas dinámicas.");
+            cbia_oldposts_log_message("[WARN] No existe cbia_get_settings(). No se pueden aplicar etiquetas dinÃƒÂ¡micas.");
             return false;
         }
 
@@ -466,7 +543,7 @@ if (!function_exists('cbia_oldposts_assign_tags_only')) {
 }
 
 /* =========================================================
-   ======================= IA: TÍTULO =======================
+   ======================= IA: TÃƒÂ�TULO =======================
    ========================================================= */
 if (!function_exists('cbia_oldposts_ai_optimize_title')) {
     function cbia_oldposts_ai_optimize_title($post_id, $force=false) {
@@ -479,23 +556,23 @@ if (!function_exists('cbia_oldposts_ai_optimize_title')) {
         }
 
         if (!function_exists('cbia_openai_responses_call') || !function_exists('cbia_pick_model')) {
-            cbia_oldposts_log_message("[ERROR] Falta motor IA (cbia_openai_responses_call / cbia_pick_model). No puedo optimizar título.");
+            cbia_oldposts_log_message("[ERROR] Falta motor IA (cbia_openai_responses_call / cbia_pick_model). No puedo optimizar tÃƒÂ­tulo.");
             return false;
         }
 
         $old_title = get_the_title($post_id);
         $content   = (string)$post->post_content;
 
-        $prompt = "Optimiza este título para SEO y CTR manteniendo la misma intención de búsqueda y el tema.\n".
-                  "Devuelve SOLO el título final, sin comillas, sin listas, sin explicaciones.\n\n".
-                  "Título actual: {$old_title}\n\n".
+        $prompt = "Optimiza este tÃƒÂ­tulo para SEO y CTR manteniendo la misma intenciÃƒÂ³n de bÃƒÂºsqueda y el tema.\n".
+                  "Devuelve SOLO el tÃƒÂ­tulo final, sin comillas, sin listas, sin explicaciones.\n\n".
+                  "TÃƒÂ­tulo actual: {$old_title}\n\n".
                   "Contexto (extracto): ".mb_substr(wp_strip_all_tags($content), 0, 600);
 
         $model = cbia_pick_model();
         list($ok, $text, $usage, $model_used, $err) = cbia_openai_responses_call($prompt, 'OLDPOSTS_TITLE', 1);
 
         if (!$ok) {
-            cbia_oldposts_log_message("[ERROR] IA título fallo post {$post_id}: {$err}");
+            cbia_oldposts_log_message("[ERROR] IA tÃƒÂ­tulo fallo post {$post_id}: {$err}");
             return false;
         }
 
@@ -503,13 +580,13 @@ if (!function_exists('cbia_oldposts_ai_optimize_title')) {
         $new_title = preg_replace('/\s+/', ' ', $new_title);
 
         if ($new_title === '' || mb_strlen($new_title) < 12) {
-            cbia_oldposts_log_message("[WARN] IA devolvió título inválido en post {$post_id}. Se omite.");
+            cbia_oldposts_log_message("[WARN] IA devolviÃƒÂ³ tÃƒÂ­tulo invÃƒÂ¡lido en post {$post_id}. Se omite.");
             return false;
         }
 
         if (mb_strtolower($new_title) === mb_strtolower($old_title)) {
             update_post_meta($post_id, '_cbia_oldposts_title_done', current_time('mysql'));
-            cbia_oldposts_log_message("[INFO] IA título: no cambió (igual) en post {$post_id}.");
+            cbia_oldposts_log_message("[INFO] IA tÃƒÂ­tulo: no cambiÃƒÂ³ (igual) en post {$post_id}.");
             return 'skipped';
         }
 
@@ -526,7 +603,7 @@ if (!function_exists('cbia_oldposts_ai_optimize_title')) {
             cbia_store_usage_meta($post_id, $usage, $model_used);
         }
 
-        cbia_oldposts_log_message("[OK] Título actualizado post {$post_id}: '{$old_title}' => '{$new_title}'");
+        cbia_oldposts_log_message("[OK] TÃƒÂ­tulo actualizado post {$post_id}: '{$old_title}' => '{$new_title}'");
         return true;
     }
 }
@@ -535,7 +612,7 @@ if (!function_exists('cbia_oldposts_ai_optimize_title')) {
    ======================= IA: CONTENIDO ====================
    ========================================================= */
 if (!function_exists('cbia_oldposts_ai_regenerate_content')) {
-    function cbia_oldposts_ai_regenerate_content($post_id, $images_limit=3, $force=false) {
+    function cbia_oldposts_ai_regenerate_content($post_id, $images_limit=3, $force=false, $skip_images=false) {
         $post = get_post($post_id);
         if (!$post) return false;
 
@@ -562,7 +639,7 @@ if (!function_exists('cbia_oldposts_ai_regenerate_content')) {
         $prompt = cbia_build_prompt_for_title($title);
 
         $model = cbia_pick_model();
-        cbia_oldposts_log_message("[INFO] IA contenido: llamando OpenAI post {$post_id} model={$model} images_limit={$images_limit}…");
+        cbia_oldposts_log_message("[INFO] IA contenido: llamando OpenAI post {$post_id} model={$model} images_limit={$images_limit}Ã¢â‚¬Â¦");
 
         list($ok, $text, $usage, $model_used, $err) = cbia_openai_responses_call($prompt, 'OLDPOSTS_CONTENT', 1);
 
@@ -575,7 +652,11 @@ if (!function_exists('cbia_oldposts_ai_regenerate_content')) {
         $html = cbia_oldposts_remove_h1($html);
 
         $pending_list = array();
-        if (function_exists('cbia_replace_markers_with_pending')) {
+        if (!empty($skip_images)) {
+            // Modo "solo contenido": elimina cualquier marcador de imagen.
+            $final_html = preg_replace('/\[IMAGEN(?:_PENDIENTE)?\s*:\s*[^\]]+\]/i', '', $html);
+            $pending_list = array();
+        } elseif (function_exists('cbia_replace_markers_with_pending')) {
             $final_html = cbia_replace_markers_with_pending($html, $images_limit, $pending_list);
         } else {
             $final_html = cbia_oldposts_mark_all_as_pending($html);
@@ -595,14 +676,22 @@ if (!function_exists('cbia_oldposts_ai_regenerate_content')) {
         }
 
         update_post_meta($post_id, '_cbia_oldposts_content_done', current_time('mysql'));
-        cbia_oldposts_log_message("[OK] Contenido regenerado en post {$post_id}. Pendientes imágenes=".count($pending_list));
+        if (!empty($skip_images)) {
+            update_post_meta($post_id, '_cbia_oldposts_content_noimg_done', current_time('mysql'));
+            cbia_oldposts_log_message("[OK] Contenido regenerado (sin imÃƒÂ¡genes) en post {$post_id}.");
+        } else {
+            cbia_oldposts_log_message("[OK] Contenido regenerado en post {$post_id}. Pendientes imÃƒÂ¡genes=".count($pending_list));
+        }
 
         return true;
     }
 }
 
 /* =========================================================
-   =================== IMÁGENES: RESET ======================
+   =================== IMÃƒÂ�GENES: RESET ======================
+   ========================================================= */
+/* =========================================================
+   =================== IMAGENES: RESET ======================
    ========================================================= */
 if (!function_exists('cbia_oldposts_images_reset_pending')) {
     function cbia_oldposts_images_reset_pending($post_id, $images_limit=3, $force=false, $clear_featured=false) {
@@ -624,10 +713,10 @@ if (!function_exists('cbia_oldposts_images_reset_pending')) {
             if ($clear_featured) {
                 delete_post_thumbnail($post_id);
                 update_post_meta($post_id, '_cbia_oldposts_images_done', current_time('mysql'));
-                cbia_oldposts_log_message("[OK] Imágenes reset: no había marcadores, pero se quitó destacada post {$post_id}.");
+                cbia_oldposts_log_message("[OK] ImÃƒÂ¡genes reset: no habÃƒÂ­a marcadores, pero se quitÃƒÂ³ destacada post {$post_id}.");
                 return true;
             }
-            cbia_oldposts_log_message("[INFO] Imágenes reset: no hay marcadores en post {$post_id}. SKIP.");
+            cbia_oldposts_log_message("[INFO] ImÃƒÂ¡genes reset: no hay marcadores en post {$post_id}. SKIP.");
             return 'skipped';
         }
 
@@ -651,9 +740,113 @@ if (!function_exists('cbia_oldposts_images_reset_pending')) {
         }
 
         update_post_meta($post_id, '_cbia_oldposts_images_done', current_time('mysql'));
-        cbia_oldposts_log_message("[OK] Imágenes reset post {$post_id}. Pendientes=".count($pending_list).($clear_featured ? " | destacada quitada" : ""));
+        cbia_oldposts_log_message("[OK] ImÃƒÂ¡genes reset post {$post_id}. Pendientes=".count($pending_list).($clear_featured ? " | destacada quitada" : ""));
 
         return true;
+    }
+}
+
+/* =========================================================
+   ============ IMÃƒÂ�GENES: SOLO CONTENIDO (reset) ============
+   ========================================================= */
+/* =========================================================
+   ============ IMAGENES: SOLO CONTENIDO (reset) ============
+   ========================================================= */
+if (!function_exists('cbia_oldposts_images_reset_content_only')) {
+    function cbia_oldposts_images_reset_content_only($post_id, $images_limit=3, $force=false) {
+        $post = get_post($post_id);
+        if (!$post) return false;
+
+        if (!$force) {
+            $done = get_post_meta($post_id, '_cbia_oldposts_images_content_done', true);
+            if ($done !== '') return 'skipped';
+        }
+
+        // Reutiliza el reset existente, pero sin tocar destacada.
+        $r = cbia_oldposts_images_reset_pending($post_id, $images_limit, true, false);
+        if ($r === true) {
+            update_post_meta($post_id, '_cbia_oldposts_images_content_done', current_time('mysql'));
+            cbia_oldposts_log_message("[OK] ImÃƒÂ¡genes (solo contenido) reseteadas en post {$post_id}.");
+            return true;
+        }
+        return $r;
+    }
+}
+
+/* =========================================================
+   ============ IMAGEN DESTACADA: SOLO DESTACADA ============
+   ========================================================= */
+if (!function_exists('cbia_oldposts_regenerate_featured_image')) {
+    function cbia_oldposts_regenerate_featured_image($post_id, $force=false, $remove_old=false) {
+        $post = get_post($post_id);
+        if (!$post) return false;
+
+        if (!$force) {
+            $done = get_post_meta($post_id, '_cbia_oldposts_featured_done', true);
+            if ($done !== '') return 'skipped';
+        }
+
+        if (!function_exists('cbia_generate_image_openai')) {
+            cbia_oldposts_log_message("[ERROR] No existe cbia_generate_image_openai(). No puedo regenerar destacada.");
+            return false;
+        }
+
+        $title = get_the_title($post_id);
+        $content = (string)$post->post_content;
+
+        // Intentamos usar el primer marcador si existe; si no, usamos el tÃƒÂ­tulo.
+        $desc = $title;
+        $markers = cbia_oldposts_extract_image_markers_any($content);
+        if (!empty($markers) && !empty($markers[0]['desc'])) {
+            $desc = (string)$markers[0]['desc'];
+        }
+
+        if ($remove_old) {
+            delete_post_thumbnail($post_id);
+        }
+
+        list($ok, $attach_id, $model, $err) = cbia_generate_image_openai($desc, 'intro', $title);
+        if ($ok && $attach_id) {
+            set_post_thumbnail($post_id, (int)$attach_id);
+            update_post_meta($post_id, '_cbia_oldposts_featured_done', current_time('mysql'));
+            update_post_meta($post_id, '_cbia_oldposts_featured_attach_id', (int)$attach_id);
+            cbia_oldposts_log_message("[OK] Destacada regenerada post {$post_id} (attach_id={$attach_id}).");
+
+            if (function_exists('cbia_costes_record_usage')) {
+                cbia_costes_record_usage($post_id, array(
+                    'type' => 'image',
+                    'model' => (string)$model,
+                    'input_tokens' => 0,
+                    'output_tokens' => 0,
+                    'cached_input_tokens' => 0,
+                    'ok' => 1,
+                    'error' => '',
+                ));
+            }
+
+            if (function_exists('cbia_image_append_call')) {
+                cbia_image_append_call($post_id, 'intro', (string)$model, true, (int)$attach_id, '');
+            }
+
+            return true;
+        }
+
+        cbia_oldposts_log_message("[ERROR] Destacada fallo post {$post_id}: " . (string)($err ?: ''));
+        if (function_exists('cbia_costes_record_usage')) {
+            cbia_costes_record_usage($post_id, array(
+                'type' => 'image',
+                'model' => (string)$model,
+                'input_tokens' => 0,
+                'output_tokens' => 0,
+                'cached_input_tokens' => 0,
+                'ok' => 0,
+                'error' => (string)($err ?: ''),
+            ));
+        }
+        if (function_exists('cbia_image_append_call')) {
+            cbia_image_append_call($post_id, 'intro', (string)$model, false, 0, (string)($err ?: ''));
+        }
+        return false;
     }
 }
 
@@ -661,7 +854,7 @@ if (!function_exists('cbia_oldposts_images_reset_pending')) {
    =================== QUERY (por fechas) ===================
    ========================================================= */
 if (!function_exists('cbia_oldposts_build_query_args')) {
-    function cbia_oldposts_build_query_args($batch_size, $scope, $filter_mode, $older_than_days, $date_from, $date_to) {
+    function cbia_oldposts_build_query_args($batch_size, $scope, $filter_mode, $older_than_days, $date_from, $date_to, $post_ids=array(), $category_id=0, $author_id=0, $dry_run=false) {
         $batch_size = max(1, min(200, (int)$batch_size));
         $scope = ($scope === 'plugin') ? 'plugin' : 'all';
 
@@ -673,9 +866,25 @@ if (!function_exists('cbia_oldposts_build_query_args')) {
             'order'          => 'DESC',
         );
 
+        $post_ids = is_array($post_ids) ? array_values(array_filter(array_map('intval', $post_ids))) : array();
+        $category_id = (int)$category_id;
+        $author_id = (int)$author_id;
+        $dry_run = !empty($dry_run);
+
+        if ($dry_run) {
+            $args['fields'] = 'ids';
+            $args['no_found_rows'] = true;
+        }
+
+        if (!empty($post_ids)) {
+            // Si hay IDs concretos, priorizamos eso y evitamos sorpresas con fechas.
+            $args['post__in'] = $post_ids;
+            $args['orderby'] = 'post__in';
+        }
+
         $filter_mode = ($filter_mode === 'range') ? 'range' : 'older';
 
-        if ($filter_mode === 'range') {
+        if (empty($post_ids) && $filter_mode === 'range') {
             $from = cbia_oldposts_sanitize_ymd($date_from);
             $to   = cbia_oldposts_sanitize_ymd($date_to);
 
@@ -696,7 +905,7 @@ if (!function_exists('cbia_oldposts_build_query_args')) {
             }
             if (!empty($date_query)) $args['date_query'] = $date_query;
 
-        } else {
+        } elseif (empty($post_ids)) {
             $older_than_days = max(1, (int)$older_than_days);
             $cutoff_gmt = gmdate('Y-m-d H:i:s', time() - ($older_than_days * DAY_IN_SECONDS));
             $args['date_query'] = array(
@@ -712,6 +921,13 @@ if (!function_exists('cbia_oldposts_build_query_args')) {
             $args['meta_query'] = array(
                 array('key' => '_cbia_created', 'value' => '1', 'compare' => '='),
             );
+        }
+
+        if ($category_id > 0) {
+            $args['cat'] = $category_id;
+        }
+        if ($author_id > 0) {
+            $args['author'] = $author_id;
         }
 
         return $args;
@@ -731,6 +947,10 @@ if (!function_exists('cbia_oldposts_run_batch_v3')) {
             'date_from'          => '',
             'date_to'            => '',
             'images_limit'       => 3,
+            'post_ids'           => array(),
+            'category_id'        => 0,
+            'author_id'          => 0,
+            'dry_run'            => 0,
 
             'do_note'            => 1,
             'force_note'         => 0,
@@ -748,10 +968,21 @@ if (!function_exists('cbia_oldposts_run_batch_v3')) {
 
             'do_content'         => 0,
             'force_content'      => 0,
+            // Variante: contenido sin tocar imÃƒÂ¡genes
+            'do_content_no_images'    => 0,
+            'force_content_no_images' => 0,
 
             'do_images_reset'    => 0,
             'force_images_reset' => 0,
             'clear_featured'     => 0,
+            // Variante: solo imÃƒÂ¡genes del contenido (sin destacada)
+            'do_images_content_only'    => 0,
+            'force_images_content_only' => 0,
+
+            // Solo imagen destacada
+            'do_featured_only'   => 0,
+            'force_featured_only'=> 0,
+            'featured_remove_old'=> 0,
 
             'do_categories'      => 0,
             'force_categories'   => 0,
@@ -768,10 +999,21 @@ if (!function_exists('cbia_oldposts_run_batch_v3')) {
         $date_from       = (string)$opts['date_from'];
         $date_to         = (string)$opts['date_to'];
         $images_limit    = max(1, min(10, (int)$opts['images_limit']));
+        $post_ids        = is_array($opts['post_ids']) ? $opts['post_ids'] : cbia_oldposts_parse_ids_csv($opts['post_ids'] ?? '');
+        $post_ids        = array_values(array_filter(array_map('intval', $post_ids)));
+        $category_id     = (int)($opts['category_id'] ?? 0);
+        $author_id       = (int)($opts['author_id'] ?? 0);
+        $dry_run         = !empty($opts['dry_run']) ? 1 : 0;
 
         $date_ymd = current_time('Y-m-d');
 
-        cbia_oldposts_log_message("INICIO v3 | lote={$batch_size} | scope={$scope} | filtro={$filter_mode} | older_than_days={$older_than_days} | from={$date_from} | to={$date_to} | images_limit={$images_limit}");
+        $ids_txt = !empty($post_ids) ? implode(',', array_slice($post_ids, 0, 20)) : '';
+        if ($ids_txt !== '' && count($post_ids) > 20) $ids_txt .= ',Ã¢â‚¬Â¦';
+        cbia_oldposts_log_message(
+            "INICIO v3 | lote={$batch_size} | scope={$scope} | filtro={$filter_mode} | older_than_days={$older_than_days} | from={$date_from} | to={$date_to} | images_limit={$images_limit}" .
+            " | ids=" . (!empty($post_ids) ? $ids_txt : '(auto)') .
+            " | cat={$category_id} | author={$author_id} | dry_run=" . ($dry_run ? 'SI' : 'NO')
+        );
 
         cbia_oldposts_log_message(
             "ACCIONES | note=".(!empty($opts['do_note'])?'SI':'NO')."(force=".(!empty($opts['force_note'])?'SI':'NO').")".
@@ -779,17 +1021,52 @@ if (!function_exists('cbia_oldposts_run_batch_v3')) {
             " | yoast_reindex=".(!empty($opts['do_yoast_reindex'])?'SI':'NO').
             " | titleIA=".(!empty($opts['do_title'])?'SI':'NO')."(force=".(!empty($opts['force_title'])?'SI':'NO').")".
             " | contentIA=".(!empty($opts['do_content'])?'SI':'NO')."(force=".(!empty($opts['force_content'])?'SI':'NO').")".
+            " | contentIA_noimg=".(!empty($opts['do_content_no_images'])?'SI':'NO')."(force=".(!empty($opts['force_content_no_images'])?'SI':'NO').")".
             " | images_reset=".(!empty($opts['do_images_reset'])?'SI':'NO')."(force=".(!empty($opts['force_images_reset'])?'SI':'NO').",clear_featured=".(!empty($opts['clear_featured'])?'SI':'NO').")".
+            " | images_content_only=".(!empty($opts['do_images_content_only'])?'SI':'NO')."(force=".(!empty($opts['force_images_content_only'])?'SI':'NO').")".
+            " | featured_only=".(!empty($opts['do_featured_only'])?'SI':'NO')."(force=".(!empty($opts['force_featured_only'])?'SI':'NO').",remove_old=".(!empty($opts['featured_remove_old'])?'SI':'NO').")".
             " | categories=".(!empty($opts['do_categories'])?'SI':'NO')."(force=".(!empty($opts['force_categories'])?'SI':'NO').")".
             " | tags=".(!empty($opts['do_tags'])?'SI':'NO')."(force=".(!empty($opts['force_tags'])?'SI':'NO').")"
         );
 
-        $args = cbia_oldposts_build_query_args($batch_size, $scope, $filter_mode, $older_than_days, $date_from, $date_to);
+        if (!empty($post_ids)) {
+            cbia_oldposts_log_message("NOTA: Se han indicado IDs concretos. Se ignoran los filtros por fecha.");
+        }
+
+        $args = cbia_oldposts_build_query_args($batch_size, $scope, $filter_mode, $older_than_days, $date_from, $date_to, $post_ids, $category_id, $author_id, $dry_run);
 
         $q = new WP_Query($args);
         if (!$q->have_posts()) {
             cbia_oldposts_log_message("No hay posts que cumplan condiciones.");
             return array(0,0,0,0); // processed, ok, skipped, fail
+        }
+
+        if (!empty($dry_run)) {
+            $ids = is_array($q->posts) ? $q->posts : array();
+            $count = count($ids);
+            cbia_oldposts_log_message("DRY RUN: se procesarÃƒÆ’Ã‚Â­an {$count} posts (sin cambios).");
+
+            $max_list = min(20, $count);
+            for ($i = 0; $i < $max_list; $i++) {
+                $pid = (int)$ids[$i];
+                $t = get_the_title($pid);
+                cbia_oldposts_log_message("DRY RUN: post {$pid} | '" . (string)$t . "'");
+            }
+
+            // Coste aproximado si hay acciones IA
+            $needs_ai = (!empty($opts['do_content']) || !empty($opts['do_title']) || !empty($opts['do_content_no_images']));
+            if ($needs_ai && function_exists('cbia_costes_estimate_for_post')) {
+                $cost_settings = function_exists('cbia_costes_get_settings') ? cbia_costes_get_settings() : array();
+                $cbia_settings = function_exists('cbia_get_settings') ? cbia_get_settings() : array();
+                $sum_est = 0.0;
+                foreach ($ids as $pid) {
+                    $est = cbia_costes_estimate_for_post((int)$pid, $cost_settings, $cbia_settings);
+                    if ($est !== null) $sum_est += (float)$est;
+                }
+                cbia_oldposts_log_message("DRY RUN: coste IA estimado (aprox)ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€  " . number_format((float)$sum_est, 4, ',', '.') . " ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬");
+            }
+
+            return array($count, 0, $count, 0);
         }
 
         $processed=0; $ok=0; $sk=0; $fail=0;
@@ -816,7 +1093,7 @@ if (!function_exists('cbia_oldposts_run_batch_v3')) {
             $did_fail = false;
             $did_skip_all = true;
 
-            // 1) TÍTULO (IA)
+            // 1) TÃƒÂ�TULO (IA)
             if (!empty($opts['do_title'])) {
                 $r = cbia_oldposts_ai_optimize_title($pid, !empty($opts['force_title']));
                 if ($r === true) { $did_any = true; $did_skip_all=false; }
@@ -828,6 +1105,20 @@ if (!function_exists('cbia_oldposts_run_batch_v3')) {
             // 2) CONTENIDO (IA)
             if (!empty($opts['do_content'])) {
                 $r = cbia_oldposts_ai_regenerate_content($pid, $images_limit, !empty($opts['force_content']));
+                if ($r === true) {
+                    $did_any = true; $did_skip_all=false;
+                    $post = get_post($pid);
+                    $content = $post ? (string)$post->post_content : $content;
+                } elseif ($r === 'skipped') {
+                    // no
+                } else {
+                    $did_fail = true;
+                }
+            }
+
+            // 2.1) CONTENIDO (IA) SIN IMÃƒÂ�GENES
+            if (!empty($opts['do_content_no_images'])) {
+                $r = cbia_oldposts_ai_regenerate_content($pid, $images_limit, !empty($opts['force_content_no_images']), true);
                 if ($r === true) {
                     $did_any = true; $did_skip_all=false;
                     $post = get_post($pid);
@@ -853,7 +1144,7 @@ if (!function_exists('cbia_oldposts_run_batch_v3')) {
                 }
             }
 
-            // 4) IMÁGENES reset
+            // 4) IMÃƒÂ�GENES reset
             if (!empty($opts['do_images_reset'])) {
                 $r = cbia_oldposts_images_reset_pending($pid, $images_limit, !empty($opts['force_images_reset']), !empty($opts['clear_featured']));
                 if ($r === true) {
@@ -867,12 +1158,37 @@ if (!function_exists('cbia_oldposts_run_batch_v3')) {
                 }
             }
 
-            // 5) CATEGORÍAS
+            // 4.1) IMAGENES: solo contenido (sin tocar destacada)
+            if (!empty($opts['do_images_content_only'])) {
+                $r = cbia_oldposts_images_reset_content_only($pid, $images_limit, !empty($opts['force_images_content_only']));
+                if ($r === true) {
+                    $did_any = true; $did_skip_all=false;
+                    $post = get_post($pid);
+                    $content = $post ? (string)$post->post_content : $content;
+                } elseif ($r === 'skipped') {
+                    // no
+                } else {
+                    $did_fail = true;
+                }
+            }
+
+            // 4.2) IMAGEN DESTACADA: solo destacada
+            if (!empty($opts['do_featured_only'])) {
+                $r = cbia_oldposts_regenerate_featured_image($pid, !empty($opts['force_featured_only']), !empty($opts['featured_remove_old']));
+                if ($r === true) {
+                    $did_any = true; $did_skip_all=false;
+                } elseif ($r === 'skipped') {
+                    // no
+                } else {
+                    $did_fail = true;
+                }
+            }
+            // 5) CATEGORÃƒÂ�AS
             if (!empty($opts['do_categories'])) {
                 $r = cbia_oldposts_assign_categories_only($pid, $title, $content, !empty($opts['force_categories']));
-                if ($r === true) { $did_any = true; $did_skip_all=false; cbia_oldposts_log_message("[OK] Categorías aplicadas en post {$pid}."); }
+                if ($r === true) { $did_any = true; $did_skip_all=false; cbia_oldposts_log_message("[OK] CategorÃƒÂ­as aplicadas en post {$pid}."); }
                 elseif ($r === 'skipped') { /* */ }
-                else { cbia_oldposts_log_message("[WARN] Categorías no aplicadas en post {$pid}."); }
+                else { cbia_oldposts_log_message("[WARN] CategorÃƒÂ­as no aplicadas en post {$pid}."); }
             }
 
             // 6) ETIQUETAS
@@ -910,7 +1226,7 @@ if (!function_exists('cbia_oldposts_run_batch_v3')) {
 
             if ($did_fail) {
                 $fail++;
-                cbia_oldposts_log_message("RESULTADO post {$pid}: FALLO (alguna acción falló).");
+                cbia_oldposts_log_message("RESULTADO post {$pid}: FALLO (alguna acciÃƒÂ³n fallÃƒÂ³).");
             } elseif ($did_skip_all && !$did_any) {
                 $sk++;
                 cbia_oldposts_log_message("RESULTADO post {$pid}: SKIP (nada que hacer / ya hecho).");
@@ -959,8 +1275,12 @@ if (!function_exists('cbia_render_tab_oldposts')) {
             'date_to'            => '',
 
             'images_limit'       => 3,
+            'post_ids'           => '',
+            'category_id'        => 0,
+            'author_id'          => 0,
+            'dry_run'            => 0,
 
-            // Básico recomendado (lo que dices que casi siempre usarás)
+            // BÃƒÂ¡sico recomendado (lo que dices que casi siempre usarÃƒÂ¡s)
             'do_note'            => 1,
             'force_note'         => 0,
 
@@ -976,10 +1296,17 @@ if (!function_exists('cbia_render_tab_oldposts')) {
 
             'do_content'         => 1,
             'force_content'      => 0,
+            'do_content_no_images'    => 0,
+            'force_content_no_images' => 0,
 
             'do_images_reset'    => 1,
             'force_images_reset' => 0,
             'clear_featured'     => 0,
+            'do_images_content_only'    => 0,
+            'force_images_content_only' => 0,
+            'do_featured_only'          => 0,
+            'force_featured_only'       => 0,
+            'featured_remove_old'       => 0,
 
             'do_categories'      => 1,
             'force_categories'   => 0,
@@ -989,7 +1316,7 @@ if (!function_exists('cbia_render_tab_oldposts')) {
         );
         $settings = array_merge($defaults, is_array($settings) ? $settings : array());
 
-        // Migración suave desde v2 si existían keys antiguas
+        // MigraciÃƒÂ³n suave desde v2 si existÃƒÂ­an keys antiguas
         if (isset($settings['do_yoast_metas']) && !isset($settings['do_yoast_metadesc'])) {
             $val = !empty($settings['do_yoast_metas']) ? 1 : 0;
             $settings['do_yoast_metadesc'] = $val;
@@ -1016,6 +1343,10 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                     $settings['date_to']         = cbia_oldposts_sanitize_ymd($u['date_to'] ?? '');
 
                     $settings['images_limit']    = isset($u['images_limit']) ? max(1, min(10, (int)$u['images_limit'])) : (int)$settings['images_limit'];
+                    $settings['post_ids']        = isset($u['post_ids']) ? implode(',', cbia_oldposts_parse_ids_csv($u['post_ids'])) : (string)$settings['post_ids'];
+                    $settings['category_id']     = isset($u['category_id']) ? (int)$u['category_id'] : (int)$settings['category_id'];
+                    $settings['author_id']       = isset($u['author_id']) ? (int)$u['author_id'] : (int)$settings['author_id'];
+                    $settings['dry_run']         = !empty($u['dry_run']) ? 1 : 0;
 
                     $settings['do_note']         = !empty($u['do_note']) ? 1 : 0;
                     $settings['force_note']      = !empty($u['force_note']) ? 1 : 0;
@@ -1032,10 +1363,17 @@ if (!function_exists('cbia_render_tab_oldposts')) {
 
                     $settings['do_content']      = !empty($u['do_content']) ? 1 : 0;
                     $settings['force_content']   = !empty($u['force_content']) ? 1 : 0;
+                    $settings['do_content_no_images']    = !empty($u['do_content_no_images']) ? 1 : 0;
+                    $settings['force_content_no_images'] = !empty($u['force_content_no_images']) ? 1 : 0;
 
                     $settings['do_images_reset']    = !empty($u['do_images_reset']) ? 1 : 0;
                     $settings['force_images_reset'] = !empty($u['force_images_reset']) ? 1 : 0;
                     $settings['clear_featured']     = !empty($u['clear_featured']) ? 1 : 0;
+                    $settings['do_images_content_only']    = !empty($u['do_images_content_only']) ? 1 : 0;
+                    $settings['force_images_content_only'] = !empty($u['force_images_content_only']) ? 1 : 0;
+                    $settings['do_featured_only']          = !empty($u['do_featured_only']) ? 1 : 0;
+                    $settings['force_featured_only']       = !empty($u['force_featured_only']) ? 1 : 0;
+                    $settings['featured_remove_old']       = !empty($u['featured_remove_old']) ? 1 : 0;
 
                     $settings['do_categories']   = !empty($u['do_categories']) ? 1 : 0;
                     $settings['force_categories']= !empty($u['force_categories']) ? 1 : 0;
@@ -1044,7 +1382,7 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                     $settings['force_tags']      = !empty($u['force_tags']) ? 1 : 0;
 
                     update_option(cbia_oldposts_settings_key(), $settings);
-                    echo '<div class="notice notice-success is-dismissible"><p>Configuración guardada.</p></div>';
+                    echo '<div class="notice notice-success is-dismissible"><p>ConfiguraciÃƒÂ³n guardada.</p></div>';
                 }
             }
 
@@ -1054,13 +1392,51 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                     $u = wp_unslash($_POST);
                     $action = sanitize_text_field($u['cbia_action'] ?? '');
 
+                    $run_actions = array(
+                        'run_oldposts',
+                        'run_quick_yoast_metas',
+                        'run_quick_yoast_reindex',
+                        'run_quick_featured',
+                        'run_quick_images_only',
+                        'run_quick_content_only',
+                    );
+
+                    // Base comÃºn para ejecuciones (normal o rÃ¡pida)
+                    $run_base = $settings;
+                    if (in_array($action, $run_actions, true)) {
+                        cbia_set_stop_flag(false);
+                        $run_base['batch_size']      = isset($u['run_batch_size']) ? max(1, min(200, (int)$u['run_batch_size'])) : (int)$settings['batch_size'];
+                        $run_base['scope']           = !empty($u['run_scope_plugin']) ? 'plugin' : 'all';
+
+                        $run_base['filter_mode']     = (!empty($u['run_filter_mode']) && $u['run_filter_mode'] === 'range') ? 'range' : 'older';
+                        $run_base['older_than_days'] = isset($u['run_older_than_days']) ? max(1, (int)$u['run_older_than_days']) : (int)$settings['older_than_days'];
+                        $run_base['date_from']       = cbia_oldposts_sanitize_ymd($u['run_date_from'] ?? $settings['date_from']);
+                        $run_base['date_to']         = cbia_oldposts_sanitize_ymd($u['run_date_to'] ?? $settings['date_to']);
+
+                        $run_base['images_limit']    = isset($u['run_images_limit']) ? max(1, min(10, (int)$u['run_images_limit'])) : (int)$settings['images_limit'];
+
+                        // Filtros avanzados (acepta run_* y nombres simples)
+                        $run_base['post_ids'] = cbia_oldposts_parse_ids_csv(
+                            $u['run_post_ids']
+                                ?? $u['post_ids']
+                                ?? ($settings['post_ids'] ?? '')
+                        );
+                        $run_base['category_id'] = isset($u['run_category_id'])
+                            ? (int)$u['run_category_id']
+                            : (isset($u['category_id']) ? (int)$u['category_id'] : (int)($settings['category_id'] ?? 0));
+                        $run_base['author_id'] = isset($u['run_author_id'])
+                            ? (int)$u['run_author_id']
+                            : (isset($u['author_id']) ? (int)$u['author_id'] : (int)($settings['author_id'] ?? 0));
+                        $run_base['dry_run'] = !empty($u['run_dry_run']) || !empty($u['dry_run']) ? 1 : 0;
+                    }
+
                     if ($action === 'run_oldposts') {
                         cbia_set_stop_flag(false);
 
                         // Base: presets
-                        $run = $settings;
+                        $run = $run_base;
 
-                        // Overrides básicos siempre visibles
+                        // Overrides bÃƒÂ¡sicos siempre visibles
                         $run['batch_size']      = isset($u['run_batch_size']) ? max(1, min(200, (int)$u['run_batch_size'])) : (int)$settings['batch_size'];
                         $run['scope']           = !empty($u['run_scope_plugin']) ? 'plugin' : 'all';
 
@@ -1071,7 +1447,7 @@ if (!function_exists('cbia_render_tab_oldposts')) {
 
                         $run['images_limit']    = isset($u['run_images_limit']) ? max(1, min(10, (int)$u['run_images_limit'])) : (int)$settings['images_limit'];
 
-                        // Si el usuario activa personalización, entonces sí aplicamos overrides de acciones.
+                        // Si el usuario activa personalizaciÃƒÂ³n, entonces sÃƒÂ­ aplicamos overrides de acciones.
                         $custom = !empty($u['run_custom_actions']) ? true : false;
 
                         if ($custom) {
@@ -1090,10 +1466,17 @@ if (!function_exists('cbia_render_tab_oldposts')) {
 
                             $run['do_content']        = !empty($u['run_do_content']) ? 1 : 0;
                             $run['force_content']     = !empty($u['run_force_content']) ? 1 : 0;
+                            $run['do_content_no_images']    = !empty($u['run_do_content_no_images']) ? 1 : 0;
+                            $run['force_content_no_images'] = !empty($u['run_force_content_no_images']) ? 1 : 0;
 
                             $run['do_images_reset']    = !empty($u['run_do_images_reset']) ? 1 : 0;
                             $run['force_images_reset'] = !empty($u['run_force_images_reset']) ? 1 : 0;
                             $run['clear_featured']     = !empty($u['run_clear_featured']) ? 1 : 0;
+                            $run['do_images_content_only']    = !empty($u['run_do_images_content_only']) ? 1 : 0;
+                            $run['force_images_content_only'] = !empty($u['run_force_images_content_only']) ? 1 : 0;
+                            $run['do_featured_only']          = !empty($u['run_do_featured_only']) ? 1 : 0;
+                            $run['force_featured_only']       = !empty($u['run_force_featured_only']) ? 1 : 0;
+                            $run['featured_remove_old']       = !empty($u['run_featured_remove_old']) ? 1 : 0;
 
                             $run['do_categories']     = !empty($u['run_do_categories']) ? 1 : 0;
                             $run['force_categories']  = !empty($u['run_force_categories']) ? 1 : 0;
@@ -1105,6 +1488,46 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                         cbia_oldposts_run_batch_v3($run);
 
                         echo '<div class="notice notice-success is-dismissible"><p>Lote ejecutado. Revisa el log.</p></div>';
+                    }
+
+                    // Acciones rÃ¡pidas (sobrescriben acciones, respetan filtros)
+                    if (in_array($action, $run_actions, true) && $action !== 'run_oldposts') {
+                        $run = $run_base;
+
+                        $action_keys = array(
+                            'do_note','force_note',
+                            'do_yoast_metadesc','do_yoast_focuskw','do_yoast_title','force_yoast','do_yoast_reindex',
+                            'do_title','force_title',
+                            'do_content','force_content',
+                            'do_content_no_images','force_content_no_images',
+                            'do_images_reset','force_images_reset','clear_featured',
+                            'do_images_content_only','force_images_content_only',
+                            'do_featured_only','force_featured_only','featured_remove_old',
+                            'do_categories','force_categories',
+                            'do_tags','force_tags',
+                        );
+                        foreach ($action_keys as $k) { $run[$k] = 0; }
+
+                        if ($action === 'run_quick_yoast_metas') {
+                            $run['do_yoast_metadesc'] = 1;
+                            $run['do_yoast_focuskw']  = 1;
+                            $run['do_yoast_title']    = 1;
+                        } elseif ($action === 'run_quick_yoast_reindex') {
+                            $run['do_yoast_reindex'] = 1;
+                        } elseif ($action === 'run_quick_featured') {
+                            $run['do_featured_only']    = 1;
+                            $run['force_featured_only'] = 1;
+                            $run['featured_remove_old'] = !empty($u['run_featured_remove_old']) ? 1 : 0;
+                        } elseif ($action === 'run_quick_images_only') {
+                            $run['do_images_content_only']    = 1;
+                            $run['force_images_content_only'] = !empty($u['run_force_images_content_only']) ? 1 : 0;
+                        } elseif ($action === 'run_quick_content_only') {
+                            $run['do_content_no_images']    = 1;
+                            $run['force_content_no_images'] = !empty($u['run_force_content_no_images']) ? 1 : 0;
+                        }
+
+                        cbia_oldposts_run_batch_v3($run);
+                        echo '<div class="notice notice-success is-dismissible"><p>AcciÃ³n rÃ¡pida ejecutada. Revisa el log.</p></div>';
                     }
 
                     if ($action === 'stop') {
@@ -1136,21 +1559,24 @@ if (!function_exists('cbia_render_tab_oldposts')) {
         }
         if (!empty($settings['do_yoast_reindex'])) $defaults_summary[] = 'Yoast reindex';
         if (!empty($settings['do_content'])) $defaults_summary[] = 'Contenido IA';
-        if (!empty($settings['do_images_reset'])) $defaults_summary[] = 'Imágenes pendientes';
-        if (!empty($settings['do_categories'])) $defaults_summary[] = 'Categorías';
+        if (!empty($settings['do_content_no_images'])) $defaults_summary[] = 'Contenido IA (sin imÃ¡genes)';
+        if (!empty($settings['do_images_reset'])) $defaults_summary[] = 'ImÃƒÂ¡genes pendientes';
+        if (!empty($settings['do_images_content_only'])) $defaults_summary[] = 'ImÃ¡genes contenido';
+        if (!empty($settings['do_featured_only'])) $defaults_summary[] = 'Solo destacada';
+        if (!empty($settings['do_categories'])) $defaults_summary[] = 'CategorÃƒÂ­as';
         if (!empty($settings['do_tags'])) $defaults_summary[] = 'Etiquetas';
-        if (!empty($settings['do_title'])) $defaults_summary[] = 'Título IA';
+        if (!empty($settings['do_title'])) $defaults_summary[] = 'TÃƒÂ­tulo IA';
 
-        $defaults_summary_text = !empty($defaults_summary) ? implode(' · ', $defaults_summary) : 'Sin acciones por defecto';
+        $defaults_summary_text = !empty($defaults_summary) ? implode(' Ã‚Â· ', $defaults_summary) : 'Sin acciones por defecto';
 
         ?>
         <div class="wrap" style="padding-left:0;">
             <h2>Actualizar antiguos</h2>
 
-            <h3>Configuración (preselección)</h3>
+            <h3>ConfiguraciÃƒÂ³n (preselecciÃƒÂ³n)</h3>
             <p class="description" style="max-width:980px;">
-                Esto define lo que normalmente harás “casi siempre”. En ejecución puedes usar esto tal cual o personalizar solo esa vez.
-                <br><strong>Qué significa “Forzar”:</strong> rehace la acción aunque ya exista / esté marcada como hecha.
+                Esto define lo que normalmente harÃƒÂ¡s Ã¢â‚¬Å“casi siempreÃ¢â‚¬Â�. En ejecuciÃƒÂ³n puedes usar esto tal cual o personalizar solo esa vez.
+                <br><strong>QuÃƒÂ© significa Ã¢â‚¬Å“ForzarÃ¢â‚¬Â�:</strong> rehace la acciÃƒÂ³n aunque ya exista / estÃƒÂ© marcada como hecha.
             </p>
 
             <form method="post" action="" autocomplete="off">
@@ -1159,7 +1585,7 @@ if (!function_exists('cbia_render_tab_oldposts')) {
 
                 <table class="form-table" style="max-width:980px;">
                     <tr>
-                        <th>Ámbito</th>
+                        <th>ÃƒÂ�mbito</th>
                         <td>
                             <label style="margin-right:18px;">
                                 <input type="radio" name="scope" value="all" <?php checked($settings['scope'], 'all'); ?> />
@@ -1173,7 +1599,7 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                     </tr>
 
                     <tr>
-                        <th>Tamaño de lote</th>
+                        <th>TamaÃƒÂ±o de lote</th>
                         <td>
                             <input type="number" name="batch_size" min="1" max="200" value="<?php echo esc_attr((int)$settings['batch_size']); ?>" style="width:120px;" />
                         </td>
@@ -1184,7 +1610,7 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                         <td>
                             <label style="margin-right:18px;">
                                 <input type="radio" name="filter_mode" value="older" <?php checked($fm, 'older'); ?> />
-                                Más antiguos que (días)
+                                MÃƒÂ¡s antiguos que (dÃƒÂ­as)
                             </label>
                             <label>
                                 <input type="radio" name="filter_mode" value="range" <?php checked($fm, 'range'); ?> />
@@ -1206,17 +1632,125 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                                         Hasta:
                                         <input type="date" name="date_to" value="<?php echo esc_attr((string)$settings['date_to']); ?>" />
                                     </label>
-                                    <p class="description">Se usa <code>post_date_gmt</code>. Si dejas vacío desde/hasta, se aplica solo el otro límite.</p>
+                                    <p class="description">Se usa <code>post_date_gmt</code>. Si dejas vacÃƒÂ­o desde/hasta, se aplica solo el otro lÃƒÂ­mite.</p>
                                 </div>
                             </div>
                         </td>
                     </tr>
 
                     <tr>
-                        <th>Imágenes (límite)</th>
+                        <th>ImÃƒÂ¡genes (lÃƒÂ­mite)</th>
                         <td>
                             <input type="number" name="images_limit" min="1" max="10" value="<?php echo esc_attr((int)$settings['images_limit']); ?>" style="width:120px;" />
-                            <p class="description">Se usa en regeneración de contenido y/o reset de pendientes.</p>
+                            <p class="description">Se usa en regeneraciÃƒÂ³n de contenido y/o reset de pendientes.</p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <th>Filtros avanzados</th>
+                        <td>
+                            <div style="margin-bottom:8px;">
+                                <label>
+                                    IDs concretos (opcional):
+                                    <input
+                                        type="text"
+                                        name="post_ids"
+                                        value="<?php echo esc_attr((string)($settings['post_ids'] ?? '')); ?>"
+                                        placeholder="123,456"
+                                        style="width:420px;"
+                                    />
+                                </label>
+                                <p class="description" style="margin:4px 0 0;">
+                                    Si indicas IDs, se ignoran los filtros por fecha.
+                                </p>
+                            </div>
+
+                            <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+                                <label>
+                                    CategorÃ­a:
+                                    <?php
+                                    wp_dropdown_categories(array(
+                                        'taxonomy' => 'category',
+                                        'hide_empty' => false,
+                                        'name' => 'category_id',
+                                        'id' => 'cbia_category_id',
+                                        'selected' => (int)($settings['category_id'] ?? 0),
+                                        'show_option_all' => 'Todas',
+                                    ));
+                                    ?>
+                                </label>
+
+                                <label>
+                                    Autor:
+                                    <?php
+                                    wp_dropdown_users(array(
+                                        'name' => 'author_id',
+                                        'id' => 'cbia_author_id',
+                                        'selected' => (int)($settings['author_id'] ?? 0),
+                                        'show_option_all' => 'Todos',
+                                    ));
+                                    ?>
+                                </label>
+
+                                <label>
+                                    <input type="checkbox" name="dry_run" value="1" <?php checked((int)($settings['dry_run'] ?? 0), 1); ?> />
+                                    Dry run por defecto (solo listar)
+                                </label>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <th>Filtros avanzados</th>
+                        <td>
+                            <div style="margin-bottom:8px;">
+                                <label>
+                                    IDs concretos (opcional):
+                                    <input
+                                        type="text"
+                                        name="run_post_ids"
+                                        value="<?php echo esc_attr((string)($settings['post_ids'] ?? '')); ?>"
+                                        placeholder="123,456"
+                                        style="width:420px;"
+                                    />
+                                </label>
+                                <p class="description" style="margin:4px 0 0;">
+                                    Si indicas IDs, se ignoran los filtros por fecha.
+                                </p>
+                            </div>
+
+                            <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+                                <label>
+                                    CategorÃ­a:
+                                    <?php
+                                    wp_dropdown_categories(array(
+                                        'taxonomy' => 'category',
+                                        'hide_empty' => false,
+                                        'name' => 'run_category_id',
+                                        'id' => 'cbia_run_category_id',
+                                        'selected' => (int)($settings['category_id'] ?? 0),
+                                        'show_option_all' => 'Todas',
+                                    ));
+                                    ?>
+                                </label>
+
+                                <label>
+                                    Autor:
+                                    <?php
+                                    wp_dropdown_users(array(
+                                        'name' => 'run_author_id',
+                                        'id' => 'cbia_run_author_id',
+                                        'selected' => (int)($settings['author_id'] ?? 0),
+                                        'show_option_all' => 'Todos',
+                                    ));
+                                    ?>
+                                </label>
+
+                                <label>
+                                    <input type="checkbox" name="run_dry_run" value="1" <?php checked((int)($settings['dry_run'] ?? 0), 1); ?> />
+                                    Dry run (solo listar)
+                                </label>
+                            </div>
                         </td>
                     </tr>
 
@@ -1224,11 +1758,11 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                         <th>Acciones por defecto</th>
                         <td style="padding-top:12px;">
                             <div style="padding:12px;border:1px solid #ddd;border-radius:8px;background:#fff;">
-                                <div style="font-weight:600;margin-bottom:8px;">Básico</div>
+                                <div style="font-weight:600;margin-bottom:8px;">BÃƒÂ¡sico</div>
 
                                 <label style="display:block;margin-bottom:8px;">
                                     <input type="checkbox" name="do_note" value="1" <?php checked((int)$settings['do_note'], 1); ?> />
-                                    Añadir nota “Actualizado el …”
+                                    AÃƒÂ±adir nota Ã¢â‚¬Å“Actualizado el Ã¢â‚¬Â¦Ã¢â‚¬Â�
                                     <span style="margin-left:14px;">
                                         <label>
                                             <input type="checkbox" name="force_note" value="1" <?php checked((int)$settings['force_note'], 1); ?> />
@@ -1248,7 +1782,7 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                                 </label>
                                 <label style="display:block;margin-bottom:6px;">
                                     <input type="checkbox" name="do_yoast_title" value="1" <?php checked((int)$settings['do_yoast_title'], 1); ?> />
-                                    SEO title (título Yoast)
+                                    SEO title (tÃƒÂ­tulo Yoast)
                                 </label>
                                 <label style="display:block;margin:8px 0;">
                                     <input type="checkbox" name="force_yoast" value="1" <?php checked((int)$settings['force_yoast'], 1); ?> />
@@ -1256,10 +1790,10 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                                 </label>
                                 <label style="display:block;margin-bottom:8px;">
                                     <input type="checkbox" name="do_yoast_reindex" value="1" <?php checked((int)$settings['do_yoast_reindex'], 1); ?> />
-                                    Reindex / semáforo (best effort)
+                                    Reindex / semÃƒÂ¡foro (best effort)
                                 </label>
 
-                                <div style="font-weight:600;margin:12px 0 8px;">Contenido e imágenes</div>
+                                <div style="font-weight:600;margin:12px 0 8px;">Contenido e imÃƒÂ¡genes</div>
                                 <label style="display:block;margin-bottom:8px;">
                                     <input type="checkbox" name="do_content" value="1" <?php checked((int)$settings['do_content'], 1); ?> />
                                     Regenerar contenido con IA
@@ -1271,8 +1805,19 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                                     </span>
                                 </label>
                                 <label style="display:block;margin-bottom:8px;">
+                                    <input type="checkbox" name="do_content_no_images" value="1" <?php checked((int)$settings['do_content_no_images'], 1); ?> />
+                                    Regenerar contenido con IA (sin imÃƒÂ¡genes)
+                                    <span style="margin-left:14px;">
+                                        <label>
+                                            <input type="checkbox" name="force_content_no_images" value="1" <?php checked((int)$settings['force_content_no_images'], 1); ?> />
+                                            Forzar
+                                        </label>
+                                    </span>
+                                </label>
+
+                                <label style="display:block;margin-bottom:8px;">
                                     <input type="checkbox" name="do_images_reset" value="1" <?php checked((int)$settings['do_images_reset'], 1); ?> />
-                                    Imágenes: marcar como pendientes (reset)
+                                    ImÃƒÂ¡genes: marcar como pendientes (reset)
                                     <span style="margin-left:14px;">
                                         <label>
                                             <input type="checkbox" name="force_images_reset" value="1" <?php checked((int)$settings['force_images_reset'], 1); ?> />
@@ -1287,10 +1832,38 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                                     </span>
                                 </label>
 
-                                <div style="font-weight:600;margin:12px 0 8px;">Taxonomías</div>
+                                <label style="display:block;margin-bottom:8px;">
+                                    <input type="checkbox" name="do_images_content_only" value="1" <?php checked((int)$settings['do_images_content_only'], 1); ?> />
+                                    ImÃ¡genes: regenerar solo las del contenido
+                                    <span style="margin-left:14px;">
+                                        <label>
+                                            <input type="checkbox" name="force_images_content_only" value="1" <?php checked((int)$settings['force_images_content_only'], 1); ?> />
+                                            Forzar
+                                        </label>
+                                    </span>
+                                </label>
+
+                                <label style="display:block;margin-bottom:8px;">
+                                    <input type="checkbox" name="do_featured_only" value="1" <?php checked((int)$settings['do_featured_only'], 1); ?> />
+                                    Imagen destacada: regenerar solo destacada
+                                    <span style="margin-left:14px;">
+                                        <label>
+                                            <input type="checkbox" name="force_featured_only" value="1" <?php checked((int)$settings['force_featured_only'], 1); ?> />
+                                            Forzar
+                                        </label>
+                                    </span>
+                                    <span style="margin-left:14px;">
+                                        <label>
+                                            <input type="checkbox" name="featured_remove_old" value="1" <?php checked((int)$settings['featured_remove_old'], 1); ?> />
+                                            Quitar destacada anterior
+                                        </label>
+                                    </span>
+                                </label>
+
+                                <div style="font-weight:600;margin:12px 0 8px;">TaxonomÃƒÂ­as</div>
                                 <label style="display:block;margin-bottom:8px;">
                                     <input type="checkbox" name="do_categories" value="1" <?php checked((int)$settings['do_categories'], 1); ?> />
-                                    Recalcular categorías
+                                    Recalcular categorÃƒÂ­as
                                     <span style="margin-left:14px;">
                                         <label>
                                             <input type="checkbox" name="force_categories" value="1" <?php checked((int)$settings['force_categories'], 1); ?> />
@@ -1312,7 +1885,7 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                                 <div style="font-weight:600;margin:12px 0 8px;">Opcional</div>
                                 <label style="display:block;margin-bottom:8px;">
                                     <input type="checkbox" name="do_title" value="1" <?php checked((int)$settings['do_title'], 1); ?> />
-                                    Optimizar título con IA
+                                    Optimizar tÃƒÂ­tulo con IA
                                     <span style="margin-left:14px;">
                                         <label>
                                             <input type="checkbox" name="force_title" value="1" <?php checked((int)$settings['force_title'], 1); ?> />
@@ -1322,7 +1895,7 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                                 </label>
 
                                 <p class="description" style="margin-top:10px;">
-                                    Consejo: si regeneras contenido, normalmente querrás también categorías/etiquetas + Yoast.
+                                    Consejo: si regeneras contenido, normalmente querrÃƒÂ¡s tambiÃƒÂ©n categorÃƒÂ­as/etiquetas + Yoast.
                                 </p>
                             </div>
                         </td>
@@ -1330,15 +1903,15 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                 </table>
 
                 <p>
-                    <button type="submit" class="button button-primary">Guardar configuración</button>
+                    <button type="submit" class="button button-primary">Guardar configuraciÃƒÂ³n</button>
                 </p>
             </form>
 
             <hr />
 
-            <h3>Ejecución</h3>
+            <h3>EjecuciÃƒÂ³n</h3>
             <p class="description" style="max-width:980px;">
-                Por defecto se ejecuta con tu preselección guardada:
+                Por defecto se ejecuta con tu preselecciÃƒÂ³n guardada:
                 <strong><?php echo esc_html($defaults_summary_text); ?></strong>
             </p>
 
@@ -1355,7 +1928,7 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                     </tr>
 
                     <tr>
-                        <th>Ámbito</th>
+                        <th>ÃƒÂ�mbito</th>
                         <td>
                             <label>
                                 <input type="checkbox" name="run_scope_plugin" value="1" <?php checked($settings['scope'], 'plugin'); ?> />
@@ -1369,7 +1942,7 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                         <td>
                             <label style="margin-right:18px;">
                                 <input type="radio" name="run_filter_mode" value="older" <?php checked($settings['filter_mode'], 'older'); ?> />
-                                Más antiguos que (días)
+                                MÃƒÂ¡s antiguos que (dÃƒÂ­as)
                             </label>
                             <label>
                                 <input type="radio" name="run_filter_mode" value="range" <?php checked($settings['filter_mode'], 'range'); ?> />
@@ -1396,26 +1969,80 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                     </tr>
 
                     <tr>
-                        <th>Imágenes (límite)</th>
+                        <th>ImÃƒÂ¡genes (lÃƒÂ­mite)</th>
                         <td>
                             <input type="number" name="run_images_limit" min="1" max="10" value="<?php echo esc_attr((int)$settings['images_limit']); ?>" style="width:120px;" />
                         </td>
                     </tr>
 
                     <tr>
-                        <th>Personalizar esta ejecución</th>
+                        <th>Filtros avanzados</th>
+                        <td>
+                            <div style="margin-bottom:8px;">
+                                <label>
+                                    IDs concretos (opcional):
+                                    <input
+                                        type="text"
+                                        name="post_ids"
+                                        value="<?php echo esc_attr((string)($settings['post_ids'] ?? '')); ?>"
+                                        placeholder="123,456"
+                                        style="width:420px;"
+                                    />
+                                </label>
+                                <p class="description" style="margin:4px 0 0;">
+                                    Si indicas IDs, se ignoran los filtros por fecha.
+                                </p>
+                            </div>
+
+                            <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+                                <label>
+                                    Categoria:
+                                    <?php
+                                    wp_dropdown_categories(array(
+                                        'taxonomy' => 'category',
+                                        'hide_empty' => false,
+                                        'name' => 'category_id',
+                                        'id' => 'cbia_run_category_id',
+                                        'selected' => (int)($settings['category_id'] ?? 0),
+                                        'show_option_all' => 'Todas',
+                                    ));
+                                    ?>
+                                </label>
+
+                                <label>
+                                    Autor:
+                                    <?php
+                                    wp_dropdown_users(array(
+                                        'name' => 'author_id',
+                                        'id' => 'cbia_run_author_id',
+                                        'selected' => (int)($settings['author_id'] ?? 0),
+                                        'show_option_all' => 'Todos',
+                                    ));
+                                    ?>
+                                </label>
+
+                                <label>
+                                    <input type="checkbox" name="dry_run" value="1" <?php checked((int)($settings['dry_run'] ?? 0), 1); ?> />
+                                    Dry run (solo listar)
+                                </label>
+                            </div>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <th>Personalizar esta ejecuciÃƒÂ³n</th>
                         <td>
                             <label>
                                 <input type="checkbox" name="run_custom_actions" id="cbia_run_custom_actions" value="1" />
-                                Quiero elegir acciones distintas a mi preselección (solo para esta vez)
+                                Quiero elegir acciones distintas a mi preselecciÃƒÂ³n (solo para esta vez)
                             </label>
 
                             <div id="cbia_run_custom_box" style="display:none;margin-top:12px;padding:12px;border:1px solid #ddd;border-radius:8px;background:#fff;">
-                                <div style="font-weight:600;margin-bottom:8px;">Acciones (solo esta ejecución)</div>
+                                <div style="font-weight:600;margin-bottom:8px;">Acciones (solo esta ejecuciÃƒÂ³n)</div>
 
                                 <label style="display:block;margin-bottom:8px;">
                                     <input type="checkbox" name="run_do_note" value="1" <?php checked((int)$settings['do_note'], 1); ?> />
-                                    Nota “Actualizado el …”
+                                    Nota Ã¢â‚¬Å“Actualizado el Ã¢â‚¬Â¦Ã¢â‚¬Â�
                                     <span style="margin-left:14px;">
                                         <label>
                                             <input type="checkbox" name="run_force_note" value="1" <?php checked((int)$settings['force_note'], 1); ?> />
@@ -1435,7 +2062,7 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                                 </label>
                                 <label style="display:block;margin-bottom:6px;">
                                     <input type="checkbox" name="run_do_yoast_title" value="1" <?php checked((int)$settings['do_yoast_title'], 1); ?> />
-                                    SEO title (título Yoast)
+                                    SEO title (tÃƒÂ­tulo Yoast)
                                 </label>
                                 <label style="display:block;margin:8px 0;">
                                     <input type="checkbox" name="run_force_yoast" value="1" <?php checked((int)$settings['force_yoast'], 1); ?> />
@@ -1443,10 +2070,10 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                                 </label>
                                 <label style="display:block;margin-bottom:8px;">
                                     <input type="checkbox" name="run_do_yoast_reindex" value="1" <?php checked((int)$settings['do_yoast_reindex'], 1); ?> />
-                                    Reindex / semáforo (best effort)
+                                    Reindex / semÃƒÂ¡foro (best effort)
                                 </label>
 
-                                <div style="font-weight:600;margin:12px 0 8px;">Contenido e imágenes</div>
+                                <div style="font-weight:600;margin:12px 0 8px;">Contenido e imÃƒÂ¡genes</div>
                                 <label style="display:block;margin-bottom:8px;">
                                     <input type="checkbox" name="run_do_content" value="1" <?php checked((int)$settings['do_content'], 1); ?> />
                                     Contenido (IA)
@@ -1459,7 +2086,7 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                                 </label>
                                 <label style="display:block;margin-bottom:8px;">
                                     <input type="checkbox" name="run_do_images_reset" value="1" <?php checked((int)$settings['do_images_reset'], 1); ?> />
-                                    Imágenes: reset pendientes
+                                    ImÃƒÂ¡genes: reset pendientes
                                     <span style="margin-left:14px;">
                                         <label>
                                             <input type="checkbox" name="run_force_images_reset" value="1" <?php checked((int)$settings['force_images_reset'], 1); ?> />
@@ -1474,10 +2101,10 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                                     </span>
                                 </label>
 
-                                <div style="font-weight:600;margin:12px 0 8px;">Taxonomías</div>
+                                <div style="font-weight:600;margin:12px 0 8px;">TaxonomÃƒÂ­as</div>
                                 <label style="display:block;margin-bottom:8px;">
                                     <input type="checkbox" name="run_do_categories" value="1" <?php checked((int)$settings['do_categories'], 1); ?> />
-                                    Categorías
+                                    CategorÃƒÂ­as
                                     <span style="margin-left:14px;">
                                         <label>
                                             <input type="checkbox" name="run_force_categories" value="1" <?php checked((int)$settings['force_categories'], 1); ?> />
@@ -1499,7 +2126,7 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                                 <div style="font-weight:600;margin:12px 0 8px;">Opcional</div>
                                 <label style="display:block;margin-bottom:8px;">
                                     <input type="checkbox" name="run_do_title" value="1" <?php checked((int)$settings['do_title'], 1); ?> />
-                                    Título (IA)
+                                    TÃƒÂ­tulo (IA)
                                     <span style="margin-left:14px;">
                                         <label>
                                             <input type="checkbox" name="run_force_title" value="1" <?php checked((int)$settings['force_title'], 1); ?> />
@@ -1509,12 +2136,48 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                                 </label>
 
                                 <p class="description" style="margin-top:10px;">
-                                    Si no marcas “Personalizar”, se usarán tus acciones por defecto sin más.
+                                    Si no marcas Ã¢â‚¬Å“PersonalizarÃ¢â‚¬Â�, se usarÃƒÂ¡n tus acciones por defecto sin mÃƒÂ¡s.
                                 </p>
                             </div>
                         </td>
                     </tr>
                 </table>
+
+                <div
+                    id="cbia-oldposts-summary"
+                    class="notice notice-info"
+                    style="max-width:980px;margin:8px 0 12px;display:none;"
+                    data-default-do-content="<?php echo (int)$settings['do_content']; ?>"
+                    data-default-do-content-no-images="<?php echo (int)($settings['do_content_no_images'] ?? 0); ?>"
+                    data-default-do-title="<?php echo (int)$settings['do_title']; ?>"
+                    data-default-do-images-reset="<?php echo (int)$settings['do_images_reset']; ?>"
+                    data-default-do-images-content-only="<?php echo (int)($settings['do_images_content_only'] ?? 0); ?>"
+                    data-default-do-featured-only="<?php echo (int)($settings['do_featured_only'] ?? 0); ?>"
+                ></div>
+
+                <div style="margin:6px 0 10px;">
+                    <span class="description" style="margin-right:8px;"><strong>Acciones rÃ¡pidas:</strong></span>
+                    <button type="submit" class="button" name="cbia_action" value="run_quick_yoast_metas">Solo metas Yoast</button>
+                    <button type="submit" class="button" name="cbia_action" value="run_quick_yoast_reindex" style="margin-left:6px;">Solo reindex Yoast</button>
+                    <button type="submit" class="button" name="cbia_action" value="run_quick_featured" style="margin-left:6px;">Solo destacada</button>
+                    <button type="submit" class="button" name="cbia_action" value="run_quick_images_only" style="margin-left:6px;">Solo imÃ¡genes contenido</button>
+                    <button type="submit" class="button" name="cbia_action" value="run_quick_content_only" style="margin-left:6px;">Solo contenido (sin imÃ¡genes)</button>
+
+                    <span style="margin-left:12px;">
+                        <label style="margin-right:8px;">
+                            <input type="checkbox" name="run_featured_remove_old" value="1" />
+                            Quitar destacada anterior
+                        </label>
+                        <label style="margin-right:8px;">
+                            <input type="checkbox" name="run_force_images_content_only" value="1" />
+                            Forzar imÃ¡genes
+                        </label>
+                        <label>
+                            <input type="checkbox" name="run_force_content_no_images" value="1" />
+                            Forzar contenido
+                        </label>
+                    </span>
+                </div>
 
                 <p>
                     <button type="submit" class="button button-primary" name="cbia_action" value="run_oldposts">
@@ -1536,6 +2199,40 @@ if (!function_exists('cbia_render_tab_oldposts')) {
 
             <script>
             document.addEventListener('DOMContentLoaded', function() {
+                // Arreglo defensivo de mojibake (texto mal decodificado).
+                // No toca la lógica: solo corrige legibilidad en la UI.
+                function tryDecodeLatin1ToUtf8(str) {
+                    try {
+                        // Patrón típico: UTF-8 leído como Latin-1.
+                        return decodeURIComponent(escape(str));
+                    } catch (e) {
+                        return str;
+                    }
+                }
+                function fixMojibakeInTextNodes(root) {
+                    if (!root || !root.ownerDocument) return;
+                    const doc = root.ownerDocument;
+                    const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+                    const suspicious = /[ÃÂâ]/;
+                    let node;
+                    while ((node = walker.nextNode())) {
+                        const original = node.nodeValue;
+                        if (!original || !suspicious.test(original)) continue;
+                        let fixed = tryDecodeLatin1ToUtf8(original);
+                        // Algunos fragmentos están doblemente rotos.
+                        if (fixed !== original && suspicious.test(fixed)) {
+                            fixed = tryDecodeLatin1ToUtf8(fixed);
+                        }
+                        if (fixed && fixed !== original) {
+                            node.nodeValue = fixed;
+                        }
+                    }
+                }
+                const wrap = document.querySelector('.wrap');
+                if (wrap) {
+                    fixMojibakeInTextNodes(wrap);
+                }
+
                 function bindFilterToggles(prefix){
                     const olderBox = document.getElementById(prefix + '_filter_older');
                     const rangeBox = document.getElementById(prefix + '_filter_range');
@@ -1559,6 +2256,97 @@ if (!function_exists('cbia_render_tab_oldposts')) {
                 if (custom && box) {
                     custom.addEventListener('change', function(){
                         box.style.display = this.checked ? '' : 'none';
+                    });
+                }
+
+                // Oculta un bloque accidental de filtros run_* en la configuraciÃ³n
+                const strayRunIds = document.querySelector('input[name="run_post_ids"]');
+                if (strayRunIds) {
+                    const tr = strayRunIds.closest('tr');
+                    if (tr) tr.style.display = 'none';
+                }
+
+                // Resumen + confirmaciÃ³n antes de ejecutar
+                const summary = document.getElementById('cbia-oldposts-summary');
+                const actionsForm = summary ? summary.closest('form') : null;
+                if (summary && actionsForm) {
+                    const getDefaultFlag = (key) => {
+                        const v = summary.dataset[key];
+                        return v === '1';
+                    };
+                    const isChecked = (name) => {
+                        const el = actionsForm.querySelector('[name="' + name + '"]');
+                        return !!el && !!el.checked;
+                    };
+                    const getValue = (name) => {
+                        const el = actionsForm.querySelector('[name="' + name + '"]');
+                        return el ? String(el.value || '').trim() : '';
+                    };
+
+                    function computeFlags() {
+                        const customOn = isChecked('run_custom_actions');
+                        if (customOn) {
+                            return {
+                                doContent: isChecked('run_do_content'),
+                                doContentNoImages: isChecked('run_do_content_no_images'),
+                                doTitle: isChecked('run_do_title'),
+                                doImagesReset: isChecked('run_do_images_reset'),
+                                doImagesContentOnly: isChecked('run_do_images_content_only'),
+                                doFeaturedOnly: isChecked('run_do_featured_only'),
+                            };
+                        }
+                        return {
+                            doContent: getDefaultFlag('defaultDoContent'),
+                            doContentNoImages: getDefaultFlag('defaultDoContentNoImages'),
+                            doTitle: getDefaultFlag('defaultDoTitle'),
+                            doImagesReset: getDefaultFlag('defaultDoImagesReset'),
+                            doImagesContentOnly: getDefaultFlag('defaultDoImagesContentOnly'),
+                            doFeaturedOnly: getDefaultFlag('defaultDoFeaturedOnly'),
+                        };
+                    }
+
+                    function updateSummary() {
+                        const flags = computeFlags();
+                        const actions = [];
+                        if (flags.doContent) actions.push('contenido IA');
+                        if (flags.doContentNoImages) actions.push('contenido IA (sin imÃ¡genes)');
+                        if (flags.doTitle) actions.push('tÃ­tulo IA');
+                        if (flags.doImagesReset) actions.push('reset imÃ¡genes');
+                        if (flags.doImagesContentOnly) actions.push('solo imÃ¡genes contenido');
+                        if (flags.doFeaturedOnly) actions.push('solo destacada');
+                        if (actions.length === 0) actions.push('sin acciones IA');
+
+                        const scopePlugin = isChecked('run_scope_plugin');
+                        const ids = getValue('post_ids');
+                        const cat = getValue('category_id');
+                        const author = getValue('author_id');
+                        const dryRun = isChecked('dry_run');
+
+                        const filters = [];
+                        filters.push(scopePlugin ? 'solo plugin' : 'todos los posts');
+                        if (ids) filters.push('IDs: ' + ids);
+                        if (!ids && cat && cat !== '0') filters.push('categorÃ­a #' + cat);
+                        if (!ids && author && author !== '0') filters.push('autor #' + author);
+                        if (dryRun) filters.push('DRY RUN');
+
+                        summary.style.display = '';
+                        summary.innerHTML =
+                            '<p style="margin:0;"><strong>Resumen:</strong> ' +
+                            actions.join(', ') +
+                            ' | ' +
+                            filters.join(' Â· ') +
+                            '</p>';
+                    }
+
+                    actionsForm.addEventListener('change', updateSummary);
+                    updateSummary();
+
+                    actionsForm.addEventListener('submit', function(e) {
+                        const flags = computeFlags();
+                        const aiRisk = flags.doContent || flags.doContentNoImages || flags.doTitle || flags.doImagesReset || flags.doImagesContentOnly || flags.doFeaturedOnly;
+                        if (!aiRisk) return;
+                        const ok = window.confirm('Se van a ejecutar acciones con IA que pueden consumir crÃ©ditos. Â¿Continuar?');
+                        if (!ok) e.preventDefault();
                     });
                 }
 
