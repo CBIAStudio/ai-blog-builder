@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /**
  * CBIA - Costes (estimación + cálculo post-hoc)
  * v12 (FIX: imágenes con precio fijo + botón "solo coste real" + tokens reales en log)
@@ -338,6 +338,50 @@ if (!function_exists('cbia_costes_get_usage_rows_for_post')) {
     }
 }
 
+
+/* =========================================================
+   ===== AJUSTE AUTOMÁTICO POR MODELO (opcional) ============
+   ========================================================= */
+if (!function_exists('cbia_costes_pick_primary_text_model')) {
+    function cbia_costes_pick_primary_text_model($rows, $cbia_settings = array()) {
+        $counts = array();
+        if (is_array($rows)) {
+            foreach ($rows as $r) {
+                if (!is_array($r)) continue;
+                $type = isset($r['type']) ? strtolower(trim((string)$r['type'])) : 'text';
+                if ($type !== 'text' && $type !== 'seo') continue;
+                $model = isset($r['model']) ? (string)$r['model'] : '';
+                if ($model === '') continue;
+                if (!isset($counts[$model])) $counts[$model] = 0;
+                $counts[$model]++;
+            }
+        }
+
+        if (!empty($counts)) {
+            arsort($counts);
+            $top = array_key_first($counts);
+            if (is_string($top) && $top !== '') return $top;
+        }
+
+        $fallback = (string)($cbia_settings['openai_model'] ?? '');
+        return $fallback;
+    }
+}
+
+if (!function_exists('cbia_costes_get_model_multiplier')) {
+    function cbia_costes_get_model_multiplier($model, $cost_settings) {
+        $model = (string)$model;
+        $map = isset($cost_settings['real_adjust_multiplier_by_model']) && is_array($cost_settings['real_adjust_multiplier_by_model'])
+            ? $cost_settings['real_adjust_multiplier_by_model']
+            : array();
+
+        if ($model === '' || empty($map) || !isset($map[$model])) return 1.0;
+
+        $mult = (float)$map[$model];
+        if ($mult <= 0) return 1.0;
+        return $mult;
+    }
+}
 if (!function_exists('cbia_costes_calc_real_for_post')) {
     /**
      * Devuelve:
@@ -350,7 +394,7 @@ if (!function_exists('cbia_costes_calc_real_for_post')) {
      * ]
      * o null si no hay filas.
      */
-    function cbia_costes_calc_real_for_post($post_id, $cost_settings) {
+    function cbia_costes_calc_real_for_post($post_id, $cost_settings, $cbia_settings = array()) {
         $rows = cbia_costes_get_usage_rows_for_post((int)$post_id);
         if (empty($rows)) return null;
 
@@ -360,6 +404,10 @@ if (!function_exists('cbia_costes_calc_real_for_post')) {
         $use_image_flat = !empty($cost_settings['use_image_flat_pricing']);
         $resp_fixed_usd = (float)($cost_settings['responses_fixed_usd_per_call'] ?? 0.0);
         $real_mult = (float)($cost_settings['real_adjust_multiplier'] ?? 1.0);
+
+        // Ajuste automático por modelo (solo si el multiplicador global está en 1.0)
+        $primary_text_model = cbia_costes_pick_primary_text_model($rows, $cbia_settings);
+        $model_mult = cbia_costes_get_model_multiplier($primary_text_model, $cost_settings);
 
         $sum_eur = 0.0;
         $calls = 0;
@@ -442,8 +490,12 @@ if (!function_exists('cbia_costes_calc_real_for_post')) {
         }
 
         // Multiplicador de ajuste final
-        if ($real_mult > 0 && $real_mult != 1.0) {
-            $sum_eur *= $real_mult;
+        $final_mult = (float)$real_mult;
+        if (($final_mult === 1.0 || $final_mult <= 0) && $model_mult > 0 && $model_mult != 1.0) {
+            $final_mult = (float)$model_mult;
+        }
+        if ($final_mult > 0 && $final_mult != 1.0) {
+            $sum_eur *= $final_mult;
         }
 
         return array(
@@ -602,7 +654,7 @@ if (!function_exists('cbia_costes_calc_last_posts')) {
             $post_id = (int)$post_id;
 
             // 1) REAL: suma por filas (modelo real por llamada)
-            $real = cbia_costes_calc_real_for_post($post_id, $cost_settings);
+            $real = cbia_costes_calc_real_for_post($post_id, $cost_settings, $cbia_settings);
             if (is_array($real)) {
                 $total_eur += (float)$real['eur'];
                 $real_posts++;
@@ -659,6 +711,11 @@ if (!function_exists('cbia_render_tab_costes')) {
             // Ajustes finos
             'responses_fixed_usd_per_call' => 0.000,
             'real_adjust_multiplier' => 1.00,
+            // Ajuste automático por modelo (solo si el multiplicador REAL está en 1.0)
+            'real_adjust_multiplier_by_model' => array(
+                'gpt-5-mini' => 1.12,
+                'gpt-5.1-mini' => 1.12,
+            ),
 
             // Multiplicadores para aproximar fallos/reintentos
             'mult_text'  => 1.00,
@@ -1249,3 +1306,6 @@ if (!function_exists('cbia_render_tab_costes')) {
 }
 
 /* ------------------------- FIN includes/cbia-costes.php ------------------------- */
+
+
+
