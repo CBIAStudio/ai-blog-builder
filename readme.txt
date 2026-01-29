@@ -1,8 +1,8 @@
 ﻿=== Creador Blog IA ===
 Contributors: webgoh
 Requires at least: 6.9
-Tested up to: 6.9
-Stable tag: 9.0.0
+Tested up to: 6.9.0
+Stable tag: 2.3
 Requires PHP: 8.2
 Network: true
 License: GPLv2 or later
@@ -37,7 +37,18 @@ Se reemplaza por un marcador “pendiente” oculto. Luego puedes pulsar “Rell
 = ¿Por qué el coste real no coincide? =
 Activa “precio fijo por imagen”, ajusta importes mini/full y, si fuera necesario, el sobrecoste por llamada de texto/SEO y el multiplicador de ajuste del coste real.
 
+== Migración legacy (plan 7.0) ==
+Los wrappers `includes/cbia-*.php` se mantienen solo por compatibilidad.
+Plan seguro:
+1. 2.3.x: wrappers mínimos + aviso deprecado (solo WP_DEBUG) + métrica de uso.
+2. 6.2/6.3: aviso admin si se detecta uso y guía de migración.
+3. 7.0: eliminación de wrappers con nota de breaking change.
+
+Modo sin wrappers (solo desarrollo):
+1. Define `CBIA_DISABLE_LEGACY_WRAPPERS` como `true` en `wp-config.php`.
+2. Comprueba que tu instalación no depende de los archivos antiguos.
+
 == Changelog ==
-* 9.0.0 - Soporte ampliado de idiomas europeos en FAQs y ajustes menores.
+* 2.3 - Estructura profesional por capas (core/admin/services/repos), UIs separadas en views, mejoras de legibilidad y hooks centralizados.
 * 5.7.9 – Reanudación estable, rellenado de pendientes, costes estimado/real, mejoras de limpieza y logs.
 

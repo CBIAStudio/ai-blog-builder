@@ -5,16 +5,17 @@ Genera entradas completas con IA (texto + imágenes) en una sola pasada. Incluye
 Tabla de contenidos
 - Qué hace y cómo funciona
 - Flujo de trabajo (pestañas)
-	- Configuración
-	- Blog (creación con checkpoint)
-	- Costes (estimación y real)
-	- Yoast/SEO
+  - Configuración
+  - Blog (creación con checkpoint)
+  - Costes (estimación y real)
+  - Yoast/SEO
 - Marcadores de imagen y pendientes
 - Programación y CRON
 - Logs y diagnóstico
 - Requisitos e instalación
 - Solución de problemas
 - Desarrollo y hooks
+- Migración legacy (plan 7.0)
 
 ## Qué hace y cómo funciona
 
@@ -39,19 +40,19 @@ Puntos clave:
 - Títulos: manual o desde CSV (URL).
 - Programación: “primera fecha/hora” + intervalo (días). Si no hay fecha, publica inmediato.
 - Botones:
-	- Probar configuración.
-	- Crear Blogs (con reanudación): encola un evento y comienza a procesar 1 título por tanda (ajustable en código). Reanuda automáticamente hasta terminar.
-	- Detener (STOP) para cortar de forma segura.
-	- Rellenar pendientes: llama a OpenAI Images para completar los “pendientes”.
-	- Limpiar checkpoint / Limpiar log.
+  - Probar configuración.
+  - Crear Blogs (con reanudación): encola un evento y comienza a procesar 1 título por tanda (ajustable en código). Reanuda automáticamente hasta terminar.
+  - Detener (STOP) para cortar de forma segura.
+  - Rellenar pendientes: llama a OpenAI Images para completar los “pendientes”.
+  - Limpiar checkpoint / Limpiar log.
 - Estado: muestra checkpoint, última fecha programada y log en vivo.
 
 ### 3) Costes (estimación y real)
 - Estimación rápida por post (texto, imágenes, SEO) según configuraciones y tabla de precios.
 - Cálculo REAL “post‑hoc” sumando cada llamada guardada (modelo real por llamada). Opciones:
-	- Precio fijo por imagen (recomendado) con importes mini/full en USD.
-	- Sobrecoste fijo por llamada de texto/SEO (USD) para cuadrar billing.
-	- Multiplicador de ajuste total del coste real.
+  - Precio fijo por imagen (recomendado) con importes mini/full en USD.
+  - Sobrecoste fijo por llamada de texto/SEO (USD) para cuadrar billing.
+  - Multiplicador de ajuste total del coste real.
 - Acciones: “Calcular” (usa real y, si falta, estimación) o “Calcular SOLO real”. Log de costes en vivo.
 
 ### 4) Yoast/SEO (opcional)
@@ -65,7 +66,7 @@ Formato en el HTML de texto: `[IMAGEN: descripción]`
 - Si faltan marcadores, inserta automáticamente en zonas útiles (tras primer párrafo, antes de FAQ, cierre).
 - Si sobran, los elimina.
 - Si una imagen falla, el marcador se reemplaza por: `<span class="cbia-img-pendiente" style="display:none">[IMAGEN_PENDIENTE: desc]</span>`
-	- Estos spans se ocultan y no rompen el layout; el rellenado posterior los sustituye por una `<img>` real.
+  - Estos spans se ocultan y no rompen el layout; el rellenado posterior los sustituye por una `<img>` real.
 
 Limpieza de artefactos
 - El motor limpia puntos sueltos tras marcadores/pendientes (`</span>.`, `</p>.`, línea con “.”), y colapsa saltos extra.
@@ -81,7 +82,7 @@ Limpieza de artefactos
 - Mensajes claros en cada fase (cola, checkpoint, evento, imágenes, pendientes, etc.).
 
 ## Requisitos e instalación
-- WordPress 6.9+ (probado en 6.9), PHP 8.2+.
+- WordPress 6.9+ (probado en 6.9.0), PHP 8.2+.
 - Multisite compatible (probado en entorno multisite).
 - Clave de API de OpenAI con permisos mínimos.
 - Yoast SEO: opcional (el plugin funciona sin él).
@@ -98,19 +99,32 @@ Instalación:
 - Costes no cuadran: activa “precio fijo por imagen”, ajusta importes mini/full y (si hace falta) el sobrecoste por llamada y el multiplicador real.
 
 ## Desarrollo y hooks
-Estructura:
-- `includes/cbia-engine.php`: motor (texto, imágenes, pendientes, creación post, limpieza, hooks).
-- `includes/cbia-blog.php`: UI de creación, AJAX, checkpoint/evento, log en vivo.
-- `includes/cbia-costes.php`: estimación/real + log.
-- `includes/cbia-config.php`: ajustes principales.
-- `includes/cbia-yoast.php`: integración básica con Yoast.
+Estructura (v2.3):
+- `includes/core/`: bootstrap, hooks y wiring de dependencias.
+- `includes/admin/`: controladores de pestañas y vistas (`admin/views/`).
+- `includes/engine/`: lógica de generación (texto, imágenes, pendientes, posts).
+- `includes/domain/`: dominios puros (p. ej., costes).
+- `includes/integrations/`: integraciones externas (Yoast, OpenAI).
+- `includes/jobs/`: CRON y tareas background.
+- `includes/support/`: helpers (sanitizado, logging, encoding).
+- `includes/legacy/`: cargadores legacy para compatibilidad.
 
 Hooks disponibles:
 - `do_action('cbia_after_post_created', $post_id, $title, $html, $usage, $model_used)`
-	- Útil para enriquecer SEO, relacionar contenido, etc.
+  - Útil para enriquecer SEO, relacionar contenido, etc.
 
 Permisos y seguridad
 - Todas las acciones de admin requieren `manage_options` y nonce.
+
+## Migración legacy (plan 7.0)
+Los wrappers `includes/cbia-*.php` se mantienen solo por compatibilidad. Plan de retirada segura:
+1. 2.3.x: wrappers mínimos + aviso deprecado (solo WP_DEBUG) + métrica de uso.
+2. 6.2/6.3: aviso admin si se detecta uso y guía de migración.
+3. 7.0: eliminación de wrappers con nota de breaking change.
+
+Modo sin wrappers en desarrollo:
+1. Define `CBIA_DISABLE_LEGACY_WRAPPERS` como `true` en `wp-config.php`.
+2. Verifica que tu instalación no depende de los archivos antiguos.
 
 Licencia
 - GPLv2 o posterior.

@@ -1,17 +1,17 @@
-<?php
+﻿<?php
 /**
  * Plugin Name: Creador Blog IA
  * Description: Genera entradas con IA (texto + marcadores de imágenes), programa con intervalos, asigna categorías/etiquetas, guarda tokens/usage y estima costes. Incluye actualización de posts antiguos y módulo Yoast.
- * Version: 9.0.0
- * 
+ * Version: 2.3
+ *
  * Author: Angel
- * Requires at least: 6.0
- * Requires PHP: 7.4
+ * Requires at least: 6.9
+ * Requires PHP: 8.2
  */
 
 if (!defined('ABSPATH')) exit;
 
-if (!defined('CBIA_VERSION')) define('CBIA_VERSION', '9.0.0');
+if (!defined('CBIA_VERSION')) define('CBIA_VERSION', '2.3');
 if (!defined('CBIA_PLUGIN_FILE')) define('CBIA_PLUGIN_FILE', __FILE__);
 if (!defined('CBIA_PLUGIN_DIR')) define('CBIA_PLUGIN_DIR', plugin_dir_path(__FILE__));
 if (!defined('CBIA_PLUGIN_URL')) define('CBIA_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -21,6 +21,23 @@ if (!defined('CBIA_OPTION_LOG')) define('CBIA_OPTION_LOG', 'cbia_activity_log');
 if (!defined('CBIA_OPTION_LOG_COUNTER')) define('CBIA_OPTION_LOG_COUNTER', 'cbia_log_counter');
 if (!defined('CBIA_OPTION_STOP')) define('CBIA_OPTION_STOP', 'cbia_stop_generation');
 if (!defined('CBIA_OPTION_CHECKPOINT')) define('CBIA_OPTION_CHECKPOINT', 'cbia_checkpoint');
+
+// Bootstrap nueva estructura (v2.3) sin afectar legacy
+$cbia_bootstrap = CBIA_INCLUDES_DIR . 'core/bootstrap.php';
+if (file_exists($cbia_bootstrap)) {
+	require_once $cbia_bootstrap;
+}
+
+// Registrar loader nuevo (si existe) sin romper legacy
+add_action('plugins_loaded', function () {
+	if (class_exists('CBIA_Loader') && function_exists('cbia_container')) {
+		$container = cbia_container();
+		$router = $container ? $container->get('admin_router') : null;
+		$scheduler = $container ? $container->get('scheduler') : null;
+		$loader = new CBIA_Loader($router, $scheduler);
+		$loader->register();
+	}
+});
 
 /**
  * Helpers globales (evitar duplicados)
@@ -43,6 +60,9 @@ if (!function_exists('cbia_log')) {
 	 * Log general en option CBIA_OPTION_LOG (texto plano acumulado)
 	 */
 	function cbia_log(string $message, string $level = 'INFO'): void {
+		if (function_exists('cbia_fix_mojibake')) {
+			$message = (string) cbia_fix_mojibake($message);
+		}
 		$level = strtoupper(trim($level ?: 'INFO'));
 		$line = '[' . cbia_now_mysql() . '][' . $level . '] ' . $message;
 		$log = (string) get_option(CBIA_OPTION_LOG, '');
@@ -65,49 +85,46 @@ if (!function_exists('cbia_log')) {
 	}
 }
 
-if (!function_exists('cbia_clear_log')) {
-	function cbia_clear_log(): void {
-		update_option(CBIA_OPTION_LOG, '', false);
-		update_option(CBIA_OPTION_LOG_COUNTER, 0, false);
-		wp_cache_delete(CBIA_OPTION_LOG, 'options');
-		wp_cache_delete(CBIA_OPTION_LOG_COUNTER, 'options');
-	}
-}
-
 if (!function_exists('cbia_get_log')) {
+	/**
+	 * Lee log general
+	 */
 	function cbia_get_log(): array {
 		$log = (string) get_option(CBIA_OPTION_LOG, '');
+		if (function_exists('cbia_fix_mojibake')) {
+			$log = cbia_fix_mojibake($log);
+		}
 		$counter = (int) get_option(CBIA_OPTION_LOG_COUNTER, 0);
 		return ['log' => $log, 'counter' => $counter];
 	}
 }
 
-if (!function_exists('cbia_is_stop_requested')) {
-	function cbia_is_stop_requested(): bool {
-		return (bool) get_option(CBIA_OPTION_STOP, false);
-	}
-}
-
-if (!function_exists('cbia_set_stop_flag')) {
-	function cbia_set_stop_flag(bool $stop): void {
-		update_option(CBIA_OPTION_STOP, $stop ? 1 : 0, false);
+if (!function_exists('cbia_clear_log')) {
+	/**
+	 * Borra log general
+	 */
+	function cbia_clear_log(): void {
+		delete_option(CBIA_OPTION_LOG);
+		delete_option(CBIA_OPTION_LOG_COUNTER);
+		wp_cache_delete(CBIA_OPTION_LOG, 'options');
+		wp_cache_delete(CBIA_OPTION_LOG_COUNTER, 'options');
 	}
 }
 
 if (!function_exists('cbia_get_default_settings')) {
+	/**
+	 * Defaults globales del plugin
+	 */
 	function cbia_get_default_settings(): array {
 		return [
 			// OpenAI
 			'openai_api_key'        => '',
-			'openai_model'          => 'gpt-5-mini',
+			'openai_model'          => 'gpt-4.1-mini',
 			'openai_temperature'    => 0.7,
-			'blocked_models'        => [],
 
 			// Longitud / imágenes
-			'post_length_variant'   => 'medium', // short|medium|long
-			'images_limit'          => 2,
-
-			// Prompts
+			'post_length_variant'   => 'medium',
+			'images_limit'          => 3,
 			'prompt_single_all'     => "Escribe un artículo de blog en HTML (sin <h1>) sobre: {title}\nIncluye marcadores de imagen del tipo [IMAGEN: descripción].",
 			'prompt_img_intro'      => '',
 			'prompt_img_body'       => '',
@@ -175,30 +192,43 @@ register_activation_hook(__FILE__, function () {
 });
 
 /**
- * Cargar módulos (orden requerido)
+ * Cargar módulos legacy (orden requerido)
  */
-$cbia_modules = [
-	CBIA_INCLUDES_DIR . 'cbia-config.php',
-	CBIA_INCLUDES_DIR . 'cbia-engine.php',
-	CBIA_INCLUDES_DIR . 'cbia-blog.php',
-	CBIA_INCLUDES_DIR . 'cbia-oldposts.php',
-	CBIA_INCLUDES_DIR . 'cbia-costes.php',
-	CBIA_INCLUDES_DIR . 'cbia-yoast.php',
-];
+if (function_exists('cbia_load_legacy_modules')) {
+	cbia_load_legacy_modules();
+} else {
+	$cbia_modules = [
+		CBIA_INCLUDES_DIR . 'legacy/cbia-config.php',
+		CBIA_INCLUDES_DIR . 'engine/engine.php',
+		CBIA_INCLUDES_DIR . 'legacy/cbia-blog.php',
+		CBIA_INCLUDES_DIR . 'legacy/cbia-oldposts.php',
+		CBIA_INCLUDES_DIR . 'legacy/cbia-costes.php',
+		CBIA_INCLUDES_DIR . 'legacy/cbia-yoast.php',
+	];
 
-foreach ($cbia_modules as $f) {
-	if (file_exists($f)) {
-		require_once $f;
-	} else {
-		// No romper el admin: solo log
-		cbia_log('No se encontró el módulo requerido: ' . basename($f), 'ERROR');
+	foreach ($cbia_modules as $f) {
+		if (file_exists($f)) {
+			require_once $f;
+		} else {
+			// No romper el admin: solo log
+			cbia_log('No se encontró el módulo requerido: ' . basename($f), 'ERROR');
+		}
 	}
+}
+
+// Registrar hooks core (notices, AJAX, assets)
+if (function_exists('cbia_register_core_hooks')) {
+	cbia_register_core_hooks();
 }
 
 /**
  * Admin: menú + tabs
  */
 add_action('admin_menu', function () {
+	if (class_exists('CBIA_Admin_Router')) {
+		// El router nuevo registra su propio menú.
+		return;
+	}
 	add_menu_page(
 		'Creador Blog IA',
 		'Creador Blog IA',
@@ -208,54 +238,6 @@ add_action('admin_menu', function () {
 		'dashicons-edit-page',
 		56
 	);
-});
-
-/**
- * Aviso Yoast SEO (solo en la pantalla del plugin)
- */
-add_action('admin_notices', function () {
-	if (!is_admin() || !current_user_can('manage_options')) return;
-	if (!function_exists('get_current_screen')) return;
-
-	$screen = get_current_screen();
-	if (!$screen || $screen->id !== 'toplevel_page_cbia') return;
-
-	include_once ABSPATH . 'wp-admin/includes/plugin.php';
-
-	$yoast_plugin = 'wordpress-seo/wp-seo.php';
-	$yoast_path = WP_PLUGIN_DIR . '/wordpress-seo/wp-seo.php';
-	$installed = file_exists($yoast_path);
-
-	if (is_plugin_active($yoast_plugin)) {
-		echo '<div class="notice notice-success is-dismissible"><p>Yoast SEO detectado y activo.</p></div>';
-		return;
-	}
-
-	if ($installed) {
-		if (current_user_can('activate_plugins')) {
-			$activate_url = wp_nonce_url(
-				self_admin_url('plugins.php?action=activate&plugin=' . rawurlencode($yoast_plugin)),
-				'activate-plugin_' . $yoast_plugin
-			);
-			$msg = 'Yoast SEO est&aacute; instalado pero inactivo. <a href="' . esc_url($activate_url) . '">Activar ahora</a>.';
-		} else {
-			$msg = 'Yoast SEO est&aacute; instalado pero inactivo.';
-		}
-		echo '<div class="notice notice-warning is-dismissible"><p>' . wp_kses($msg, ['a' => ['href' => []]]) . '</p></div>';
-		return;
-	}
-
-	if (current_user_can('install_plugins')) {
-		$install_url = wp_nonce_url(
-			self_admin_url('update.php?action=install-plugin&plugin=wordpress-seo'),
-			'install-plugin_wordpress-seo'
-		);
-		$msg = 'Yoast SEO no est&aacute; instalado. <a href="' . esc_url($install_url) . '">Instalar Yoast SEO</a>.';
-	} else {
-		$msg = 'Yoast SEO no est&aacute; instalado.';
-	}
-
-	echo '<div class="notice notice-warning is-dismissible"><p>' . wp_kses($msg, ['a' => ['href' => []]]) . '</p></div>';
 });
 
 if (!function_exists('cbia_get_admin_tabs')) {
@@ -286,102 +268,28 @@ if (!function_exists('cbia_render_admin_page')) {
 
 		$tabs = cbia_get_admin_tabs();
 		$current = cbia_get_current_tab();
+		$current_tab = $tabs[$current] ?? null;
 
 		echo '<div class="wrap">';
 		echo '<h1>Creador Blog IA <small style="font-weight:normal;opacity:.7;">v' . esc_html(CBIA_VERSION) . '</small></h1>';
-
-		// Tabs
 		echo '<h2 class="nav-tab-wrapper">';
-		foreach ($tabs as $key => $t) {
-			$url = admin_url('admin.php?page=cbia&tab=' . $key);
-			$cls = 'nav-tab' . ($key === $current ? ' nav-tab-active' : '');
-			echo '<a class="' . esc_attr($cls) . '" href="' . esc_url($url) . '">' . esc_html($t['label']) . '</a>';
+
+		foreach ($tabs as $tab_key => $tab_data) {
+			$label = $tab_data['label'] ?? $tab_key;
+			$url = admin_url('admin.php?page=cbia&tab=' . $tab_key);
+			$active = $tab_key === $current ? ' nav-tab-active' : '';
+			echo '<a href="' . esc_url($url) . '" class="nav-tab' . $active . '">' . esc_html($label) . '</a>';
 		}
+
 		echo '</h2>';
 
-		// Render tab
-		$render = $tabs[$current]['render'];
-		if (is_callable($render)) {
-			call_user_func($render);
+		if ($current_tab && isset($current_tab['render']) && is_callable($current_tab['render'])) {
+			call_user_func($current_tab['render']);
 		} else {
 			echo '<p>No se pudo cargar esta pestaña.</p>';
-			cbia_log('Render no callable para tab: ' . $current, 'ERROR');
 		}
 
 		echo '</div>';
 	}
 }
 
-/**
- * AJAX: leer log / limpiar log / stop flag
- */
-add_action('admin_enqueue_scripts', function ($hook) {
-	if ($hook !== 'toplevel_page_cbia') return;
-
-	wp_enqueue_script('jquery');
-
-	// Script inline mínimo (sin archivos extra)
-	$ajax_url = admin_url('admin-ajax.php');
-	$nonce = wp_create_nonce('cbia_ajax_nonce');
-
-	$js = <<<JS
-(function($){
-  window.CBIA = window.CBIA || {};
-  CBIA.ajaxUrl = "{$ajax_url}";
-  CBIA.nonce = "{$nonce}";
-
-  CBIA.fetchLog = function(targetSelector){
-    return $.post(CBIA.ajaxUrl, {action:'cbia_get_log', _ajax_nonce: CBIA.nonce})
-      .done(function(res){
-        if(res && res.success && res.data){
-          $(targetSelector).val(res.data.log || '');
-        }
-      });
-  };
-
-  CBIA.clearLog = function(targetSelector){
-    return $.post(CBIA.ajaxUrl, {action:'cbia_clear_log', _ajax_nonce: CBIA.nonce})
-      .done(function(res){
-        if(res && res.success){
-          $(targetSelector).val('');
-        }
-      });
-  };
-
-  CBIA.setStop = function(stop){
-    return $.post(CBIA.ajaxUrl, {action:'cbia_set_stop', stop: stop ? 1 : 0, _ajax_nonce: CBIA.nonce});
-  };
-})(jQuery);
-JS;
-
-	wp_add_inline_script('jquery', $js, 'after');
-});
-
-if (!has_action('wp_ajax_cbia_get_log')) {
-	add_action('wp_ajax_cbia_get_log', function () {
-		check_ajax_referer('cbia_ajax_nonce');
-		if (!current_user_can('manage_options')) wp_send_json_error(['msg' => 'No autorizado'], 403);
-
-		nocache_headers();
-		$payload = cbia_get_log();
-		wp_send_json_success($payload);
-	});
-}
-
-add_action('wp_ajax_cbia_clear_log', function () {
-	check_ajax_referer('cbia_ajax_nonce');
-	if (!current_user_can('manage_options')) wp_send_json_error(['msg' => 'No autorizado'], 403);
-
-	cbia_clear_log();
-	wp_send_json_success(['ok' => 1]);
-});
-
-add_action('wp_ajax_cbia_set_stop', function () {
-	check_ajax_referer('cbia_ajax_nonce');
-	if (!current_user_can('manage_options')) wp_send_json_error(['msg' => 'No autorizado'], 403);
-
-	$stop = isset($_POST['stop']) ? (int) $_POST['stop'] : 0;
-	cbia_set_stop_flag($stop === 1);
-	cbia_log($stop === 1 ? 'Se activó STOP (detener generación).' : 'Se desactivó STOP (reanudar).', 'INFO');
-	wp_send_json_success(['stop' => $stop === 1 ? 1 : 0]);
-});
