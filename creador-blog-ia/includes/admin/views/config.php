@@ -218,6 +218,17 @@ echo '</td></tr>';
 echo '<tr><th scope="row"><label>Imágenes de contenido como banner (no destacada)</label></th><td>';
 echo '<label><input type="checkbox" name="content_images_banner_enabled" value="1" ' . checked(!empty($s['content_images_banner_enabled']), true, false) . ' /> Aplicar clase <code>cbia-banner</code> a imágenes internas (no destacada).</label>';
 echo '<p class="description">Por defecto está activado. Puedes desactivarlo si no quieres aplicar estilos a las imágenes internas.</p>';
+if (function_exists('cbia_config_banner_css_presets')) {
+    $presets = cbia_config_banner_css_presets();
+    if (!empty($presets)) {
+        echo '<p class="description" style="margin-top:8px;"><strong>Presets de estilo:</strong></p>';
+        foreach ($presets as $key => $data) {
+            $label = (string)($data['label'] ?? $key);
+            echo '<button type="submit" name="cbia_banner_css_preset" value="' . esc_attr($key) . '" class="button button-secondary" style="margin-right:6px;margin-bottom:6px;">' . esc_html($label) . '</button>';
+        }
+        echo '<p class="description">Puedes usar un preset o personalizar el CSS manualmente.</p>';
+    }
+}
 echo '<p style="margin:10px 0 6px;"><strong>CSS para imágenes internas (cbia-banner)</strong></p>';
 echo '<textarea name="content_images_banner_css" rows="8" style="width:100%;">' . esc_textarea((string)($s['content_images_banner_css'] ?? '')) . '</textarea>';
 echo '<p class="description">Este CSS se inyecta en el frontend cuando la opción está activa. Puedes personalizarlo.</p>';

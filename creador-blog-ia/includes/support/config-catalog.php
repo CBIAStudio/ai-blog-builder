@@ -98,3 +98,43 @@ if (!function_exists('cbia_config_sanitize_image_format')) {
     }
 }
 
+if (!function_exists('cbia_config_banner_css_presets')) {
+    /**
+     * Presets de CSS para imágenes internas (clase cbia-banner).
+     */
+    function cbia_config_banner_css_presets(): array {
+        return [
+            'elementor_350' => [
+                'label' => 'Banner 350px (Elementor)',
+                'css' =>
+                    ".elementor-widget-theme-post-content img.cbia-banner{\n" .
+                    "  width: 100%;\n" .
+                    "  height: 350px !important;\n" .
+                    "  max-height: 350px !important;\n" .
+                    "  object-fit: cover;\n" .
+                    "  object-position: center;\n" .
+                    "  border-radius: 20px;\n" .
+                    "  display: block;\n" .
+                    "}\n",
+            ],
+            'compact_250' => [
+                'label' => 'Banner 250px (compacto)',
+                'css' =>
+                    "img.cbia-banner {\n" .
+                    "  width: 100%;\n" .
+                    "  height: 250px !important;\n" .
+                    "  object-fit: cover !important;\n" .
+                    "  object-position: 50% 60% !important;\n" .
+                    "  display: block !important;\n" .
+                    "  margin: 15px 0 !important;\n" .
+                    "  transition: transform 0.3s ease !important;\n" .
+                    "}\n",
+            ],
+            'none' => [
+                'label' => 'Sin estilo (vacío)',
+                'css' => '',
+            ],
+        ];
+    }
+}
+

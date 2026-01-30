@@ -105,6 +105,18 @@ if (!function_exists('cbia_config_handle_post')) {
 			? cbia_sanitize_textarea_preserve_lines($_POST['content_images_banner_css'])
 			: (string)($settings['content_images_banner_css'] ?? '');
 
+		// Preset rÃ¡pido de CSS de banner (si se pulsa botÃ³n)
+		$banner_preset_key = isset($_POST['cbia_banner_css_preset']) ? sanitize_text_field(wp_unslash($_POST['cbia_banner_css_preset'])) : '';
+		if ($banner_preset_key !== '' && function_exists('cbia_config_banner_css_presets')) {
+			$presets = cbia_config_banner_css_presets();
+			if (isset($presets[$banner_preset_key])) {
+				$css = (string)($presets[$banner_preset_key]['css'] ?? '');
+				$content_images_banner_css = $css;
+				$content_images_banner_enabled = ($banner_preset_key === 'none') ? 0 : 1;
+				cbia_log('Preset CSS de banner aplicado: ' . $banner_preset_key, 'INFO');
+			}
+		}
+
 		// Formato de imagen por sección (UI) - nota: el engine fuerza intro=panorámica y resto=banner (como en v8.4)
 		$image_format_intro = isset($_POST['image_format_intro'])
 			? cbia_config_sanitize_image_format($_POST['image_format_intro'], 'panoramic_1536x1024')
