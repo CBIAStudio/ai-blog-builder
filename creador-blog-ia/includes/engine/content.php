@@ -174,3 +174,21 @@ if (!function_exists('cbia_insert_faq_heading_if_missing')) {
         return $html . "\n\n<h2>" . esc_html($heading) . "</h2>\n";
     }
 }
+
+if (!function_exists('cbia_normalize_faq_heading')) {
+    /**
+     * Normaliza el título de FAQ a la versión configurada/idioma.
+     */
+    function cbia_normalize_faq_heading($html) {
+        $html = (string)$html;
+        $heading = cbia_get_faq_heading();
+        if ($heading === '') return $html;
+
+        // Reemplaza cualquier H2 de FAQ conocido por el heading deseado.
+        $pattern = '/<h2[^>]*>\\s*(FAQ|Preguntas frecuentes|Preguntas Frecuentes|Questions? ?FAQs?|FAQs)\\s*<\\/h2>/i';
+        $replacement = '<h2>' . esc_html($heading) . '</h2>';
+        $html = preg_replace($pattern, $replacement, $html);
+
+        return $html;
+    }
+}
