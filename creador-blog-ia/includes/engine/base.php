@@ -197,3 +197,18 @@ if (!function_exists('cbia_fix_bracket_headings')) {
         return $text;
     }
 }
+
+if (!function_exists('cbia_replace_first_occurrence')) {
+    /**
+     * Replace first occurrence of a substring.
+     */
+    function cbia_replace_first_occurrence($haystack, $needle, $replacement) {
+        $haystack = (string)$haystack;
+        $needle = (string)$needle;
+        $replacement = (string)$replacement;
+        if ($needle === '') return $haystack;
+        $pos = strpos($haystack, $needle);
+        if ($pos === false) return $haystack;
+        return substr($haystack, 0, $pos) . $replacement . substr($haystack, $pos + strlen($needle));
+    }
+}
