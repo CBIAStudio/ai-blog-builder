@@ -138,3 +138,23 @@ if (!function_exists('cbia_config_banner_css_presets')) {
     }
 }
 
+if (!function_exists('cbia_config_detect_banner_css_preset')) {
+    /**
+     * Detect preset key based on current CSS.
+     */
+    function cbia_config_detect_banner_css_preset(string $css): string {
+        $css = trim($css);
+        $presets = cbia_config_banner_css_presets();
+        foreach ($presets as $key => $data) {
+            $preset_css = trim((string)($data['css'] ?? ''));
+            if ($preset_css !== '' && $preset_css === $css) {
+                return $key;
+            }
+            if ($preset_css === '' && $css === '') {
+                return $key;
+            }
+        }
+        return 'custom';
+    }
+}
+

@@ -220,18 +220,59 @@ echo '<label><input type="checkbox" name="content_images_banner_enabled" value="
 echo '<p class="description">Por defecto está activado. Puedes desactivarlo si no quieres aplicar estilos a las imágenes internas.</p>';
 if (function_exists('cbia_config_banner_css_presets')) {
     $presets = cbia_config_banner_css_presets();
+    $current_css = (string)($s['content_images_banner_css'] ?? '');
+    $current_preset = function_exists('cbia_config_detect_banner_css_preset')
+        ? cbia_config_detect_banner_css_preset($current_css)
+        : 'custom';
+
     if (!empty($presets)) {
-        echo '<p class="description" style="margin-top:8px;"><strong>Presets de estilo:</strong></p>';
+        echo '<p class="description" style="margin-top:8px;"><strong>Preset de estilo:</strong></p>';
+        echo '<select name="content_images_banner_preset" id="cbia-banner-css-preset" style="width:420px;">';
         foreach ($presets as $key => $data) {
             $label = (string)($data['label'] ?? $key);
-            echo '<button type="submit" name="cbia_banner_css_preset" value="' . esc_attr($key) . '" class="button button-secondary" style="margin-right:6px;margin-bottom:6px;">' . esc_html($label) . '</button>';
+            echo '<option value="' . esc_attr($key) . '" ' . selected($current_preset, $key, false) . '>' . esc_html($label) . '</option>';
         }
-        echo '<p class="description">Puedes usar un preset o personalizar el CSS manualmente.</p>';
+        echo '<option value="custom" ' . selected($current_preset, 'custom', false) . '>Personalizado (editar CSS)</option>';
+        echo '</select>';
+        echo '<p class="description">Si eliges un preset, el CSS se rellena automáticamente. Para editarlo, elige “Personalizado”.</p>';
     }
 }
+
+echo '<div id="cbia-banner-css-custom" style="margin-top:10px;">';
 echo '<p style="margin:10px 0 6px;"><strong>CSS para imágenes internas (cbia-banner)</strong></p>';
-echo '<textarea name="content_images_banner_css" rows="8" style="width:100%;">' . esc_textarea((string)($s['content_images_banner_css'] ?? '')) . '</textarea>';
+echo '<textarea name="content_images_banner_css" id="cbia-banner-css-textarea" rows="8" style="width:100%;">' . esc_textarea((string)($s['content_images_banner_css'] ?? '')) . '</textarea>';
 echo '<p class="description">Este CSS se inyecta en el frontend cuando la opción está activa. Puedes personalizarlo.</p>';
+echo '</div>';
+
+if (function_exists('cbia_config_banner_css_presets')) {
+    $preset_payload = [];
+    foreach ($presets as $key => $data) {
+        $preset_payload[$key] = (string)($data['css'] ?? '');
+    }
+    $preset_json = wp_json_encode($preset_payload);
+    echo '<script>
+    (function(){
+        var presetSelect = document.getElementById("cbia-banner-css-preset");
+        var textarea = document.getElementById("cbia-banner-css-textarea");
+        var customBox = document.getElementById("cbia-banner-css-custom");
+        if (!presetSelect || !textarea || !customBox) return;
+        var presetMap = ' . $preset_json . ';
+        function applyPreset() {
+            var key = presetSelect.value;
+            if (key === "custom") {
+                customBox.style.display = "block";
+                return;
+            }
+            if (presetMap[key] !== undefined) {
+                textarea.value = presetMap[key];
+            }
+            customBox.style.display = "none";
+        }
+        presetSelect.addEventListener("change", applyPreset);
+        applyPreset();
+    })();
+    </script>';
+}
 echo '</td></tr>';
 
 

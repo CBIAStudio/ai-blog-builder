@@ -180,3 +180,20 @@ if (!function_exists('cbia_http_headers_openai')) {
         return $headers;
     }
 }
+
+if (!function_exists('cbia_fix_bracket_headings')) {
+    /**
+     * Convierte headings en formato [H2]...[/H2] a HTML válido.
+     */
+    function cbia_fix_bracket_headings($html): string {
+        $text = (string)$html;
+        // [H2]Título[/H2] => <h2>Título</h2>
+        $text = preg_replace_callback('/\\[(H[1-6])\\]\\s*(.*?)\\s*\\[\\/\\1\\]/si', function ($m) {
+            $tag = strtolower($m[1]);
+            $content = trim((string)$m[2]);
+            return '<' . $tag . '>' . $content . '</' . $tag . '>';
+        }, $text);
+
+        return $text;
+    }
+}
