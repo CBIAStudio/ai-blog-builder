@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 if (!defined('ABSPATH')) exit;
 
 // Config tab view (extracted from legacy cbia-config.php)

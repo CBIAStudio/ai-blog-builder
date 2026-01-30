@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 if (!defined('ABSPATH')) exit;
 
 // Yoast tab view (extracted from legacy cbia-yoast.php)

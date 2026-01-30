@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Content helpers: markers, cleanup, FAQ heading.
  */

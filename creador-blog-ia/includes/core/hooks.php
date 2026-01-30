@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Core hooks (admin notices, AJAX, assets).
  */

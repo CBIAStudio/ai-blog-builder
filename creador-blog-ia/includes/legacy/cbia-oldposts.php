@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Legacy Old Posts loader.
  */

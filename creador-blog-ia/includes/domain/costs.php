@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * CBIA - Costes (estimación + cálculo post-hoc)
  * v12 (FIX: imágenes con precio fijo + botón "solo coste real" + tokens reales en log)

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Bootstrap for the new 2.3 structure.
  * Loads new classes without changing legacy flow yet.

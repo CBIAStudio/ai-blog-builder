@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * CBIA - Old Posts (Actualización avanzada de posts antiguos)
  * v3 (UI limpia + acciones sin duplicidad + Yoast por campos)

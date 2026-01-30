@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Legacy module loader (keeps current behavior).
  */

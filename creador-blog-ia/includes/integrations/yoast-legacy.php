@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // File: includes/integrations/yoast-legacy.php
 if (!defined('ABSPATH')) exit;
 

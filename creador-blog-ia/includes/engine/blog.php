@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // File: includes/engine/blog.php
 if (!defined('ABSPATH')) exit;
 

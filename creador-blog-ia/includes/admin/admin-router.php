@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Admin router: register tabs and menus.
  */

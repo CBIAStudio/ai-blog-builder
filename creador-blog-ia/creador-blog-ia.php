@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Plugin Name: Creador Blog IA
  * Description: Genera entradas con IA (texto + marcadores de imágenes), programa con intervalos, asigna categorías/etiquetas, guarda tokens/usage y estima costes. Incluye actualización de posts antiguos y módulo Yoast.

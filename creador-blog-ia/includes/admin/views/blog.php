@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 if (!defined('ABSPATH')) exit;
 
 // Blog tab view (extracted from legacy cbia-blog.php)
