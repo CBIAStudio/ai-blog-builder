@@ -162,9 +162,12 @@ if (!function_exists('cbia_create_single_blog_post')) {
 		// Normaliza el título de FAQ según idioma/config
 		$text_html = cbia_normalize_faq_heading($text_html);
 
-		// 3) Procesar marcadores de imagen
-		$internal_limit = max(0, $images_limit - 1);
-		$markers = cbia_extract_image_markers($text_html);
+        // 3) Procesar marcadores de imagen
+        $internal_limit = max(0, $images_limit - 1);
+        if (function_exists('cbia_normalize_image_markers')) {
+            $text_html = cbia_normalize_image_markers($text_html);
+        }
+        $markers = cbia_extract_image_markers($text_html);
 		if (!empty($markers)) $markers = array_slice($markers, 0, $internal_limit);
 
 		// Si hay menos marcadores que el límite interno, autoinserta los que falten
@@ -203,8 +206,8 @@ if (!function_exists('cbia_create_single_blog_post')) {
 
 				if (!$featured_attach_id) $featured_attach_id = (int)$attach_id;
 
-				cbia_replace_first_occurrence($text_html, $mk['full'], $img_tag);
-			} else {
+                $text_html = cbia_replace_first_occurrence($text_html, $mk['full'], $img_tag);
+            } else {
 				$desc_clean = cbia_sanitize_alt_from_desc($desc);
 				$pending_list[] = [
 					'desc' => $desc_clean,
@@ -216,9 +219,9 @@ if (!function_exists('cbia_create_single_blog_post')) {
 					'attach_id' => 0,
 				];
 				$placeholder = "<span class='cbia-img-pendiente' style='display:none'>[IMAGEN_PENDIENTE: {$desc_clean}]</span>";
-				cbia_replace_first_occurrence($text_html, $mk['full'], $placeholder);
-			}
-		}
+                $text_html = cbia_replace_first_occurrence($text_html, $mk['full'], $placeholder);
+            }
+        }
 
 		// Si no hay featured (porque no hay markers o fallaron), intenta crear destacada manual
 		if (!$featured_attach_id) {
@@ -241,7 +244,7 @@ if (!function_exists('cbia_create_single_blog_post')) {
 		}
 
 		// Limpieza de artefactos antes de guardar
-		cbia_cleanup_post_html($text_html);
+        $text_html = cbia_cleanup_post_html($text_html);
 
 		// Crear post en WP
 		list($ok_post, $post_id, $post_err) = cbia_create_post_in_wp_engine($title, $text_html, $featured_attach_id, $post_date_mysql);

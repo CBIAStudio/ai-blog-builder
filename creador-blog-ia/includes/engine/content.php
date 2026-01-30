@@ -37,6 +37,17 @@ if (!function_exists('cbia_extract_image_markers')) {
     }
 }
 
+if (!function_exists('cbia_normalize_image_markers')) {
+    /**
+     * Normaliza variantes malformadas como [hIMAGEN: ...] => [IMAGEN: ...]
+     */
+    function cbia_normalize_image_markers($html) {
+        $html = (string)$html;
+        $html = preg_replace('/\\[h\\s*(IMAGEN|IMAGE|IMMAGINE|IMAGEM|BILD|FOTO)\\s*:/i', '[$1:', $html);
+        return $html;
+    }
+}
+
 if (!function_exists('cbia_extract_pending_markers')) {
     function cbia_extract_pending_markers($html) {
         $markers = [];
