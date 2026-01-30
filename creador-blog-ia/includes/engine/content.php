@@ -84,7 +84,6 @@ if (!function_exists('cbia_build_img_alt')) {
 
 if (!function_exists('cbia_detect_marker_section')) {
     function cbia_detect_marker_section($html, $marker_pos, $is_first) {
-        if ($is_first) return 'intro';
         $len = strlen((string)$html);
         // Si hay FAQ y el marcador está después => faq
         if (preg_match('/<h2[^>]*>[^<]*(FAQ|Preguntas frecuentes|Questions|FAQs)/i', $html, $m, PREG_OFFSET_CAPTURE)) {

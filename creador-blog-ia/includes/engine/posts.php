@@ -205,8 +205,6 @@ if (!function_exists('cbia_create_single_blog_post')) {
 				$alt = cbia_build_img_alt($title, $section, $desc);
 				$img_tag = cbia_build_content_img_tag($url, $alt, $section);
 
-				if (!$featured_attach_id) $featured_attach_id = (int)$attach_id;
-
 				$text_html = cbia_replace_first_occurrence($text_html, $mk['full'], $img_tag);
 				cbia_log("Imagen insertada en contenido: secciÃ³n={$section}", 'INFO');
 			} else {
