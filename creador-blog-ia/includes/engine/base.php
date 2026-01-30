@@ -121,3 +121,21 @@ if (!function_exists('cbia_clear_log')) {
         wp_cache_delete(cbia_log_counter_key(), 'options');
     }
 }
+
+if (!function_exists('cbia_is_stop_requested')) {
+    /**
+     * Unified STOP flag reader (used by engine + AJAX).
+     */
+    function cbia_is_stop_requested(): bool {
+        if (function_exists('cbia_check_stop_flag')) {
+            return (bool)cbia_check_stop_flag();
+        }
+        if (function_exists('cbia_stop_flag_key')) {
+            return !empty(get_option(cbia_stop_flag_key(), 0));
+        }
+        if (defined('CBIA_OPTION_STOP')) {
+            return !empty(get_option(CBIA_OPTION_STOP, 0));
+        }
+        return false;
+    }
+}
