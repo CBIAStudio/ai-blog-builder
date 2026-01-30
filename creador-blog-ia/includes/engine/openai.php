@@ -93,6 +93,8 @@ if (!function_exists('cbia_openai_responses_call')) {
 					continue;
 				}
 
+				cbia_log("OpenAI Responses OK: modelo={$model} tokens_in=" . (int)($usage['input_tokens'] ?? 0) . " tokens_out=" . (int)($usage['output_tokens'] ?? 0), 'INFO');
+
 				return [true, $text, $usage, $model, '', $data];
 			}
 		}
@@ -189,6 +191,7 @@ if (!function_exists('cbia_generate_image_openai')) {
 					continue;
 				}
 
+				cbia_log("Imagen IA OK: secciÃ³n={$section} attach_id={$attach_id}", 'INFO');
 				return [true, (int)$attach_id, $model, ''];
 			}
 		}

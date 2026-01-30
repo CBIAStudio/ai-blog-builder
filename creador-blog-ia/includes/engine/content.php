@@ -86,13 +86,18 @@ if (!function_exists('cbia_detect_marker_section')) {
     function cbia_detect_marker_section($html, $marker_pos, $is_first) {
         if ($is_first) return 'intro';
         $len = strlen((string)$html);
-        // Si está cerca del final => conclusion
-        if ($marker_pos > max((int)(0.85 * $len), $len - 2500)) return 'conclusion';
         // Si hay FAQ y el marcador está después => faq
-        if (preg_match('/<h2[^>]*>[^<]*FAQ|Preguntas frecuentes|Questions|FAQs/i', $html, $m, PREG_OFFSET_CAPTURE)) {
+        if (preg_match('/<h2[^>]*>[^<]*(FAQ|Preguntas frecuentes|Questions|FAQs)/i', $html, $m, PREG_OFFSET_CAPTURE)) {
             $faq_pos = (int)($m[0][1] ?? 0);
             if ($faq_pos > 0 && $marker_pos > $faq_pos) return 'faq';
         }
+        // Si hay Conclusión/Cierre y el marcador está después => conclusion
+        if (preg_match('/<h2[^>]*>[^<]*(Conclusión|Conclusion|Cierre|Final)/i', $html, $m2, PREG_OFFSET_CAPTURE)) {
+            $concl_pos = (int)($m2[0][1] ?? 0);
+            if ($concl_pos > 0 && $marker_pos > $concl_pos) return 'conclusion';
+        }
+        // Si está cerca del final => conclusion
+        if ($marker_pos > max((int)(0.80 * $len), $len - 2500)) return 'conclusion';
         return 'body';
     }
 }

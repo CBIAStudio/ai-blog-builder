@@ -161,6 +161,7 @@ if (!function_exists('cbia_create_single_blog_post')) {
 		$text_html = cbia_fix_bracket_headings($text_html);
 		// Normaliza el título de FAQ según idioma/config
 		$text_html = cbia_normalize_faq_heading($text_html);
+		cbia_log("Texto IA OK: generado HTML para '{$title}'", 'INFO');
 
         // 3) Procesar marcadores de imagen
         $internal_limit = max(0, $images_limit - 1);
@@ -206,8 +207,9 @@ if (!function_exists('cbia_create_single_blog_post')) {
 
 				if (!$featured_attach_id) $featured_attach_id = (int)$attach_id;
 
-                $text_html = cbia_replace_first_occurrence($text_html, $mk['full'], $img_tag);
-            } else {
+				$text_html = cbia_replace_first_occurrence($text_html, $mk['full'], $img_tag);
+				cbia_log("Imagen insertada en contenido: secciÃ³n={$section}", 'INFO');
+			} else {
 				$desc_clean = cbia_sanitize_alt_from_desc($desc);
 				$pending_list[] = [
 					'desc' => $desc_clean,
@@ -219,9 +221,10 @@ if (!function_exists('cbia_create_single_blog_post')) {
 					'attach_id' => 0,
 				];
 				$placeholder = "<span class='cbia-img-pendiente' style='display:none'>[IMAGEN_PENDIENTE: {$desc_clean}]</span>";
-                $text_html = cbia_replace_first_occurrence($text_html, $mk['full'], $placeholder);
-            }
-        }
+				$text_html = cbia_replace_first_occurrence($text_html, $mk['full'], $placeholder);
+				cbia_log("Imagen pendiente en contenido: secciÃ³n={$section} err=" . ($img_err ?: 'unknown'), 'WARN');
+			}
+		}
 
 		// Si no hay featured (porque no hay markers o fallaron), intenta crear destacada manual
 		if (!$featured_attach_id) {
