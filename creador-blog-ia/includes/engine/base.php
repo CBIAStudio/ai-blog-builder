@@ -157,3 +157,26 @@ if (!function_exists('cbia_openai_api_key')) {
         return is_array($settings) ? (string)($settings['openai_api_key'] ?? '') : '';
     }
 }
+
+if (!function_exists('cbia_http_headers_openai')) {
+    /**
+     * Build HTTP headers for OpenAI API calls.
+     */
+    function cbia_http_headers_openai(string $api_key): array {
+        $headers = [
+            'Content-Type' => 'application/json',
+            'Authorization' => 'Bearer ' . $api_key,
+        ];
+
+        // Optional: Organization header if present in settings.
+        if (function_exists('cbia_get_settings')) {
+            $settings = cbia_get_settings();
+            $org = trim((string)($settings['openai_org'] ?? ''));
+            if ($org !== '') {
+                $headers['OpenAI-Organization'] = $org;
+            }
+        }
+
+        return $headers;
+    }
+}
