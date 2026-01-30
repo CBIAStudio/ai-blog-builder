@@ -238,6 +238,7 @@ if (!function_exists('cbia_create_single_blog_post')) {
 			];
 			if ($ok && $attach_id) {
 				$featured_attach_id = (int)$attach_id;
+				cbia_log("Imagen destacada OK: attach_id={$featured_attach_id}", 'INFO');
 			} else {
 				// no ponemos placeholder aquí porque es destacada, no va en contenido
 				cbia_log("No se pudo generar destacada para '{$title}': " . ($e ?: ''), 'ERROR');

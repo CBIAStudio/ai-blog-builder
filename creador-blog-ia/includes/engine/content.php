@@ -85,18 +85,23 @@ if (!function_exists('cbia_build_img_alt')) {
 if (!function_exists('cbia_detect_marker_section')) {
     function cbia_detect_marker_section($html, $marker_pos, $is_first) {
         $len = strlen((string)$html);
+        $html = (string)$html;
         // Si hay FAQ y el marcador está después => faq
         if (preg_match('/<h2[^>]*>[^<]*(FAQ|Preguntas frecuentes|Questions|FAQs)/i', $html, $m, PREG_OFFSET_CAPTURE)) {
             $faq_pos = (int)($m[0][1] ?? 0);
-            if ($faq_pos > 0 && $marker_pos > $faq_pos) return 'faq';
+            if ($faq_pos > 0) {
+                // Si está justo antes de FAQ (margen razonable), marcar como faq
+                if ($marker_pos >= max(0, $faq_pos - 2000) && $marker_pos < $faq_pos) return 'faq';
+                if ($marker_pos > $faq_pos) return 'faq';
+            }
         }
         // Si hay Conclusión/Cierre y el marcador está después => conclusion
         if (preg_match('/<h2[^>]*>[^<]*(Conclusión|Conclusion|Cierre|Final)/i', $html, $m2, PREG_OFFSET_CAPTURE)) {
             $concl_pos = (int)($m2[0][1] ?? 0);
             if ($concl_pos > 0 && $marker_pos > $concl_pos) return 'conclusion';
         }
-        // Si está cerca del final => conclusion
-        if ($marker_pos > max((int)(0.80 * $len), $len - 2500)) return 'conclusion';
+        // Si está a mitad o cerca del final => conclusion
+        if ($marker_pos > (int)(0.50 * $len)) return 'conclusion';
         return 'body';
     }
 }
