@@ -65,8 +65,14 @@ if (!function_exists('cbia_build_content_img_tag')) {
 
         $fmt = cbia_get_image_format_for_section($section);
 
+        $settings = function_exists('cbia_get_settings') ? cbia_get_settings() : [];
+        $apply_banner = !empty($settings['content_images_banner_enabled']);
+        if ($section === 'intro') {
+            $apply_banner = false;
+        }
+
         $classes = [];
-        if (cbia_is_banner_format($fmt)) {
+        if ($apply_banner && cbia_is_banner_format($fmt)) {
             $classes[] = 'cbia-banner';
             $classes[] = 'lazyloaded';
         }

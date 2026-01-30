@@ -18,6 +18,11 @@ if (!isset($s['default_category'])) $s['default_category'] = 'Noticias';
 if (!isset($s['post_language'])) $s['post_language'] = 'español';
 if (!isset($s['faq_heading_custom'])) $s['faq_heading_custom'] = '';
 if (!isset($s['responses_max_output_tokens'])) $s['responses_max_output_tokens'] = 6000;
+if (!isset($s['content_images_banner_enabled'])) $s['content_images_banner_enabled'] = 1;
+if (!isset($s['content_images_banner_css']) || trim((string)$s['content_images_banner_css']) === '') {
+    $defaults = function_exists('cbia_get_default_settings') ? cbia_get_default_settings() : [];
+    $s['content_images_banner_css'] = (string)($defaults['content_images_banner_css'] ?? '');
+}
 // Formatos (UI). Nota: el engine fuerza intro=panorámica, resto=banner.
 if (!isset($s['image_format_intro'])) $s['image_format_intro'] = 'panoramic_1536x1024';
 if (!isset($s['image_format_body'])) $s['image_format_body'] = 'banner_1536x1024';
@@ -208,6 +213,14 @@ echo '</td></tr>';
 echo '<tr><th scope="row"><label>FAQ: título personalizado</label></th><td>';
 echo '<input type="text" name="faq_heading_custom" value="' . esc_attr((string)$s['faq_heading_custom']) . '" style="width:420px;" />';
 echo '<p class="description">Si lo rellenas, se fuerza este <code>&lt;h2&gt;</code> para la sección de FAQ.</p>';
+echo '</td></tr>';
+
+echo '<tr><th scope="row"><label>Imágenes de contenido como banner (no destacada)</label></th><td>';
+echo '<label><input type="checkbox" name="content_images_banner_enabled" value="1" ' . checked(!empty($s['content_images_banner_enabled']), true, false) . ' /> Aplicar clase <code>cbia-banner</code> a imágenes internas (no destacada).</label>';
+echo '<p class="description">Por defecto está activado. Puedes desactivarlo si no quieres aplicar estilos a las imágenes internas.</p>';
+echo '<p style="margin:10px 0 6px;"><strong>CSS para imágenes internas (cbia-banner)</strong></p>';
+echo '<textarea name="content_images_banner_css" rows="8" style="width:100%;">' . esc_textarea((string)($s['content_images_banner_css'] ?? '')) . '</textarea>';
+echo '<p class="description">Este CSS se inyecta en el frontend cuando la opción está activa. Puedes personalizarlo.</p>';
 echo '</td></tr>';
 
 

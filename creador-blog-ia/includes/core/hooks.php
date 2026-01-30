@@ -43,6 +43,11 @@ if (!function_exists('cbia_register_core_hooks')) {
         if (!has_action('wp_ajax_cbia_get_costes_log', 'cbia_ajax_get_costes_log')) {
             add_action('wp_ajax_cbia_get_costes_log', 'cbia_ajax_get_costes_log');
         }
+
+        // Frontend styles for banner images
+        if (!has_action('wp_head', 'cbia_output_banner_css')) {
+            add_action('wp_head', 'cbia_output_banner_css', 20);
+        }
     }
 }
 
@@ -200,6 +205,21 @@ if (!function_exists('cbia_admin_enqueue_inline')) {
 JS;
 
         wp_add_inline_script('jquery', $js, 'after');
+    }
+}
+
+if (!function_exists('cbia_output_banner_css')) {
+    function cbia_output_banner_css() {
+        if (is_admin()) return;
+
+        if (!function_exists('cbia_get_settings')) return;
+        $settings = cbia_get_settings();
+        if (empty($settings['content_images_banner_enabled'])) return;
+
+        $css = trim((string)($settings['content_images_banner_css'] ?? ''));
+        if ($css === '') return;
+
+        echo "<style id='cbia-banner-css'>\n" . $css . "\n</style>";
     }
 }
 

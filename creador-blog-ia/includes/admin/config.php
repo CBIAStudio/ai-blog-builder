@@ -99,6 +99,12 @@ if (!function_exists('cbia_config_handle_post')) {
 			? sanitize_text_field(wp_unslash($_POST['faq_heading_custom']))
 			: (string)($settings['faq_heading_custom'] ?? '');
 
+		// Banner CSS en contenido (no destacada)
+		$content_images_banner_enabled = !empty($_POST['content_images_banner_enabled']) ? 1 : 0;
+		$content_images_banner_css = isset($_POST['content_images_banner_css'])
+			? cbia_sanitize_textarea_preserve_lines($_POST['content_images_banner_css'])
+			: (string)($settings['content_images_banner_css'] ?? '');
+
 		// Formato de imagen por sección (UI) - nota: el engine fuerza intro=panorámica y resto=banner (como en v8.4)
 		$image_format_intro = isset($_POST['image_format_intro'])
 			? cbia_config_sanitize_image_format($_POST['image_format_intro'], 'panoramic_1536x1024')
@@ -157,6 +163,8 @@ if (!function_exists('cbia_config_handle_post')) {
 			'responses_max_output_tokens' => $responses_max_output_tokens,
 			'post_language'          => $post_language,
 			'faq_heading_custom'     => $faq_heading_custom,
+			'content_images_banner_enabled' => $content_images_banner_enabled,
+			'content_images_banner_css' => $content_images_banner_css,
 			'image_format_intro'     => $image_format_intro,
 			'image_format_body'      => $image_format_body,
 			'image_format_conclusion'=> $image_format_conclusion,

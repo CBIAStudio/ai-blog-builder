@@ -141,6 +141,19 @@ if (!function_exists('cbia_get_default_settings')) {
 
 			// Blog scheduling / cron fill
 			'enable_cron_fill'      => 0,
+
+			// Estilos imagenes contenido (no destacada)
+			'content_images_banner_enabled' => 1,
+			'content_images_banner_css' =>
+				".elementor-widget-theme-post-content img.cbia-banner{\n" .
+				"  width: 100%;\n" .
+				"  height: 350px !important;\n" .
+				"  max-height: 350px !important;\n" .
+				"  object-fit: cover;\n" .
+				"  object-position: center;\n" .
+				"  border-radius: 20px;\n" .
+				"  display: block;\n" .
+				"}",
 		];
 	}
 }
