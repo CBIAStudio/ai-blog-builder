@@ -1,56 +1,51 @@
-Ôªø=== Creador Blog IA ===
+=== Creador Blog IA ===
 Contributors: webgoh
 Requires at least: 6.9
 Tested up to: 6.9.0
-Stable tag: 2.3
+Stable tag: 3.0
 Requires PHP: 8.2
 Network: true
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Generaci√≥n de entradas con IA (texto + im√°genes), reanudaci√≥n con checkpoint y rellenado de im√°genes pendientes. C√°lculo de costes estimado y real.
+GeneraciÛn de entradas con IA (texto + im·genes), reanudaciÛn con checkpoint y rellenado de im·genes pendientes. C·lculo de costes estimado y real.
 
 == Description ==
 
-Plugin para crear posts completos con OpenAI (texto + im√°genes) sin bloquear la pantalla. Procesa por tandas, reanuda con checkpoint, asigna categor√≠as/etiquetas por reglas y permite rellenar im√°genes pendientes (manual o por CRON).
-Este plugin usa la API de OpenAI √∫nicamente cuando el usuario lo activa desde el panel y con consentimiento expl√≠cito en Configuraci√≥n.
+Plugin para crear posts completos con OpenAI (texto + im·genes) sin bloquear la pantalla. Procesa por tandas, reanuda con checkpoint, asigna categorÌas/etiquetas por reglas y permite rellenar im·genes pendientes (manual o por CRON).
+Este plugin usa la API de OpenAI ˙nicamente cuando el usuario lo activa desde el panel y con consentimiento explÌcito en ConfiguraciÛn.
 
-Caracter√≠sticas clave:
-* 1 destacada + (images_limit - 1) im√°genes en contenido
-* Marcadores `[IMAGEN: ...]` insertados autom√°ticamente si faltan; los sobrantes se eliminan
+CaracterÌsticas clave:
+* 1 destacada + (images_limit - 1) im·genes en contenido
+* Marcadores `[IMAGEN: ...]` insertados autom·ticamente si faltan; los sobrantes se eliminan
 * Log en vivo y STOP seguro
-* Costes: estimaci√≥n r√°pida y c√°lculo REAL por llamada (con precio fijo por imagen opcional)
-* Diagn√≥stico r√°pido del entorno y del plugin
-* Compatible con Yoast SEO (opcional). El plugin NO requiere Yoast; si est√° activo, se integran metas y hooks.
+* Costes: estimaciÛn r·pida y c·lculo REAL por llamada (con precio fijo por imagen opcional)
+* DiagnÛstico r·pido del entorno y del plugin
+* Compatible con Yoast SEO (opcional). El plugin NO requiere Yoast; si est· activo, se integran metas y hooks.
 
 == Installation ==
 1. Sube la carpeta del plugin a `wp-content/plugins/`.
-2. Activa el plugin desde ‚ÄúPlugins‚Äù.
-3. Ve a Ajustes ‚Üí Creador Blog IA, a√±ade tu API Key y configura.
+2. Activa el plugin desde ìPluginsî.
+3. Ve a Ajustes ? Creador Blog IA, aÒade tu API Key y configura.
 
 == Frequently Asked Questions ==
 
-= ¬øC√≥mo funciona la reanudaci√≥n? =
-Usa un checkpoint que guarda cola, √≠ndice y totales. El bot√≥n ‚ÄúCrear Blogs‚Äù encola un evento; cada evento procesa N posts (por defecto 1) y, si queda cola, reprograma el siguiente.
+= øCÛmo funciona la reanudaciÛn? =
+Usa un checkpoint que guarda cola, Ìndice y totales. El botÛn ìCrear Blogsî encola un evento; cada evento procesa N posts (por defecto 1) y, si queda cola, reprograma el siguiente.
 
-= ¬øQu√© pasa si una imagen falla? =
-Se reemplaza por un marcador ‚Äúpendiente‚Äù oculto. Luego puedes pulsar ‚ÄúRellenar pendientes‚Äù o dejar que el CRON lo haga.
+= øQuÈ pasa si una imagen falla? =
+Se reemplaza por un marcador ìpendienteî oculto. Luego puedes pulsar ìRellenar pendientesî o dejar que el CRON lo haga.
 
-= ¬øPor qu√© el coste real no coincide? =
-Activa ‚Äúprecio fijo por imagen‚Äù, ajusta importes mini/full y, si fuera necesario, el sobrecoste por llamada de texto/SEO y el multiplicador de ajuste del coste real.
+= øPor quÈ el coste real no coincide? =
+Activa ìprecio fijo por imagenî, ajusta importes mini/full y, si fuera necesario, el sobrecoste por llamada de texto/SEO y el multiplicador de ajuste del coste real.
 
-== Migraci√≥n legacy (plan 7.0) ==
-Los wrappers `includes/cbia-*.php` se mantienen solo por compatibilidad.
-Plan seguro:
-1. 2.3.x: wrappers m√≠nimos + aviso deprecado (solo WP_DEBUG) + m√©trica de uso.
-2. 6.2/6.3: aviso admin si se detecta uso y gu√≠a de migraci√≥n.
-3. 7.0: eliminaci√≥n de wrappers con nota de breaking change.
-
-Modo sin wrappers (solo desarrollo):
-1. Define `CBIA_DISABLE_LEGACY_WRAPPERS` como `true` en `wp-config.php`.
-2. Comprueba que tu instalaci√≥n no depende de los archivos antiguos.
+== MigraciÛn legacy (eliminada en 3.0) ==
+Los wrappers legacy (`includes/legacy/cbia-*.php`) han sido eliminados en la versiÛn 3.0.
+Si tu instalaciÛn dependÌa de esos archivos, migra a las rutas nuevas en `includes/` (core/admin/engine/domain).
 
 == Changelog ==
+* 3.0 - Eliminado legacy (wrappers), core limpio y estructura estable. Release mayor.
 * 2.3 - Estructura profesional por capas (core/admin/services/repos), UIs separadas en views, mejoras de legibilidad y hooks centralizados.
-* 5.7.9 ‚Äì Reanudaci√≥n estable, rellenado de pendientes, costes estimado/real, mejoras de limpieza y logs.
+* 5.7.9 ñ ReanudaciÛn estable, rellenado de pendientes, costes estimado/real, mejoras de limpieza y logs.
+
 

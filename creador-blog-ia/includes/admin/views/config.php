@@ -61,26 +61,6 @@ echo ' &nbsp;|&nbsp; Ajuste REAL efectivo: <code>x' . esc_html(number_format((fl
 echo '</p>';
 echo '</div>';
 
-// Aviso de compatibilidad legacy (wrappers en uso)
-if (function_exists('cbia_legacy_get_usage')) {
-    $legacy_usage = cbia_legacy_get_usage();
-    if (!empty($legacy_usage)) {
-        $items = [];
-        foreach ($legacy_usage as $file => $info) {
-            $count = (int)($info['count'] ?? 0);
-            $last = (int)($info['last'] ?? 0);
-            $last_txt = $last > 0 ? date_i18n('Y-m-d H:i:s', $last) : '—';
-            $items[] = esc_html($file) . ' (' . $count . ' / ' . esc_html($last_txt) . ')';
-        }
-        $list = implode(', ', $items);
-        echo '<div class="notice notice-warning" style="margin:8px 0 12px 0;">';
-        echo '<p style="margin:6px 0;"><strong>Compatibilidad legacy detectada:</strong> ';
-        echo '<code>' . $list . '</code>.';
-        echo ' Se eliminarán en v7.0. Ver sección “Migración legacy”.</p>';
-        echo '</div>';
-    }
-}
-
 echo '<form method="post">';
 wp_nonce_field('cbia_config_save_action', 'cbia_config_nonce');
 echo '<input type="hidden" name="cbia_config_save" value="1" />';

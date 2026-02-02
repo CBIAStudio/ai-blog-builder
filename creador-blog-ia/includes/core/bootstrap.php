@@ -1,7 +1,6 @@
 <?php
 /**
- * Bootstrap for the new 2.3 structure.
- * Loads new classes without changing legacy flow yet.
+ * Bootstrap for the 3.0 structure.
  */
 
 if (!defined('ABSPATH')) exit;
@@ -10,7 +9,6 @@ $cbia_new_files = array(
     CBIA_INCLUDES_DIR . 'core/loader.php',
     CBIA_INCLUDES_DIR . 'core/container.php',
     CBIA_INCLUDES_DIR . 'core/wiring.php',
-    CBIA_INCLUDES_DIR . 'core/legacy-loader.php',
     CBIA_INCLUDES_DIR . 'core/hooks.php',
     CBIA_INCLUDES_DIR . 'admin/admin-router.php',
     CBIA_INCLUDES_DIR . 'admin/admin-tab.php',

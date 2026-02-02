@@ -11,11 +11,6 @@ if (!function_exists('cbia_register_core_hooks')) {
         if (!has_action('admin_notices', 'cbia_admin_notice_yoast')) {
             add_action('admin_notices', 'cbia_admin_notice_yoast');
         }
-        // Admin notice: legacy wrappers in use (deprecation)
-        if (!has_action('admin_notices', 'cbia_admin_notice_legacy_wrappers')) {
-            add_action('admin_notices', 'cbia_admin_notice_legacy_wrappers');
-        }
-
         // Admin scripts (inline helpers)
         if (!has_action('admin_enqueue_scripts', 'cbia_admin_enqueue_inline')) {
             add_action('admin_enqueue_scripts', 'cbia_admin_enqueue_inline');
@@ -48,73 +43,6 @@ if (!function_exists('cbia_register_core_hooks')) {
         if (!has_action('wp_head', 'cbia_output_banner_css')) {
             add_action('wp_head', 'cbia_output_banner_css', 20);
         }
-    }
-}
-
-/* =========================================================
-   =============== LEGACY WRAPPERS (DEPRECATION) ===========
-   ========================================================= */
-if (!function_exists('cbia_legacy_usage_key')) {
-    function cbia_legacy_usage_key(): string {
-        return 'cbia_legacy_usage';
-    }
-}
-
-if (!function_exists('cbia_legacy_mark_used')) {
-    /**
-     * Registra uso de wrappers legacy para preparar su eliminación en 7.0.
-     */
-    function cbia_legacy_mark_used(string $file, bool $log_if_debug = true): void {
-        $file = basename($file);
-        if ($file === '') return;
-
-        $usage = get_option(cbia_legacy_usage_key(), array());
-        if (!is_array($usage)) $usage = array();
-
-        if (!isset($usage[$file])) {
-            $usage[$file] = array('count' => 0, 'last' => 0);
-        }
-        $usage[$file]['count'] = (int)($usage[$file]['count'] ?? 0) + 1;
-        $usage[$file]['last'] = time();
-
-        update_option(cbia_legacy_usage_key(), $usage, false);
-        wp_cache_delete(cbia_legacy_usage_key(), 'options');
-
-        static $logged = array();
-        if ($log_if_debug && defined('WP_DEBUG') && WP_DEBUG && function_exists('cbia_log') && empty($logged[$file])) {
-            $logged[$file] = true;
-            cbia_log('Deprecated wrapper usado: ' . $file . ' (se retirará en v7.0).', 'WARN');
-        }
-    }
-}
-
-if (!function_exists('cbia_legacy_get_usage')) {
-    function cbia_legacy_get_usage(): array {
-        $usage = get_option(cbia_legacy_usage_key(), array());
-        return is_array($usage) ? $usage : array();
-    }
-}
-
-if (!function_exists('cbia_admin_notice_legacy_wrappers')) {
-    function cbia_admin_notice_legacy_wrappers() {
-        if (!is_admin() || !current_user_can('manage_options')) return;
-        if (!function_exists('get_current_screen')) return;
-
-        $screen = get_current_screen();
-        if (!$screen || $screen->id !== 'toplevel_page_cbia') return;
-
-        $usage = cbia_legacy_get_usage();
-        if (empty($usage)) return;
-
-        $files = array_keys($usage);
-        sort($files);
-        $list = esc_html(implode(', ', $files));
-
-        echo '<div class="notice notice-warning is-dismissible">';
-        echo '<p><strong>Compatibilidad legacy en uso.</strong> Se detectó carga de wrappers antiguos: ';
-        echo '<code>' . $list . '</code>.';
-        echo ' Se retirarán en la versión 7.0. Consulta la sección “Migración legacy” en el README.</p>';
-        echo '</div>';
     }
 }
 

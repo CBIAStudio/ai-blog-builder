@@ -1,115 +1,115 @@
-ï»¿# Creador Blog IA (WordPress)
+# Creador Blog IA (WordPress) v3.0
 
-Genera entradas completas con IA (texto + imÃ¡genes) en una sola pasada. Incluye marcadores de imagen inteligentes, programaciÃ³n con reanudaciÃ³n por checkpoint, rellenado de imÃ¡genes pendientes y cÃ¡lculo de costes (estimado y real).
+Genera entradas completas con IA (texto + imágenes) en una sola pasada. Incluye marcadores de imagen inteligentes, programación con reanudación por checkpoint, rellenado de imágenes pendientes y cálculo de costes (estimado y real).
 
 Tabla de contenidos
-- QuÃ© hace y cÃ³mo funciona
-- Flujo de trabajo (pestaÃ±as)
-  - ConfiguraciÃ³n
-  - Blog (creaciÃ³n con checkpoint)
-  - Costes (estimaciÃ³n y real)
+- Qué hace y cómo funciona
+- Flujo de trabajo (pestañas)
+  - Configuración
+  - Blog (creación con checkpoint)
+  - Costes (estimación y real)
   - Yoast/SEO
-  - DiagnÃ³stico
+  - Diagnóstico
 - Marcadores de imagen y pendientes
-- ProgramaciÃ³n y CRON
-- Logs y diagnÃ³stico
-- Requisitos e instalaciÃ³n
-- SoluciÃ³n de problemas
+- Programación y CRON
+- Logs y diagnóstico
+- Requisitos e instalación
+- Solución de problemas
 - Desarrollo y hooks
-- MigraciÃ³n legacy (plan 7.0)
+- Migración legacy (eliminada en 3.0)
 
-## QuÃ© hace y cÃ³mo funciona
+## Qué hace y cómo funciona
 
-El plugin llama a OpenAI (Responses) para generar el HTML de un post y procesa marcadores de imagen con OpenAI Images. Crea la destacada y las imÃ¡genes internas respetando el lÃ­mite configurado. Si alguna imagen falla, deja un marcador â€œpendienteâ€ oculto para rellenarlo luego (manual o por CRON).
-Este plugin usa la API de OpenAI Ãºnicamente cuando el usuario lo activa desde el panel y con consentimiento explÃ­cito en ConfiguraciÃ³n.
+El plugin llama a OpenAI (Responses) para generar el HTML de un post y procesa marcadores de imagen con OpenAI Images. Crea la destacada y las imágenes internas respetando el límite configurado. Si alguna imagen falla, deja un marcador “pendiente” oculto para rellenarlo luego (manual o por CRON).
+Este plugin usa la API de OpenAI únicamente cuando el usuario lo activa desde el panel y con consentimiento explícito en Configuración.
 
 Puntos clave:
-- 1 destacada + (images_limit âˆ’ 1) imÃ¡genes en contenido.
-- Marcadores sobrantes se eliminan; marcadores fallidos se sustituyen por un â€œpendienteâ€ oculto y rastreable.
-- ReanudaciÃ³n con checkpoint: nunca bloquea la pantalla; procesa por tandas cortas y reprograma el siguiente evento.
+- 1 destacada + (images_limit - 1) imágenes en contenido.
+- Marcadores sobrantes se eliminan; marcadores fallidos se sustituyen por un “pendiente” oculto y rastreable.
+- Reanudación con checkpoint: nunca bloquea la pantalla; procesa por tandas cortas y reprograma el siguiente evento.
 - Log de actividad en vivo.
 
-## Flujo de trabajo (pestaÃ±as)
+## Flujo de trabajo (pestañas)
 
-### 1) ConfiguraciÃ³n
-- OpenAI API Key y modelo de texto preferido (con fallback entre gptâ€‘5 / gptâ€‘4.1).
-- Longitud objetivo, temperatura, lÃ­mite de imÃ¡genes.
-- Prompts de imagen por secciÃ³n (intro/cuerpo/cierre/FAQ).
-- Reglas: keywords â†’ categorÃ­as; â€œTags permitidasâ€ (lista blanca) para autoseleccionar etiquetas.
-- Bloqueo de modelos (no se usan aunque estÃ©n en el fallback).
+### 1) Configuración
+- OpenAI API Key y modelo de texto preferido (con fallback entre gpt-5 / gpt-4.1).
+- Longitud objetivo, temperatura, límite de imágenes.
+- Prompts de imagen por sección (intro/cuerpo/cierre/FAQ).
+- Reglas: keywords ? categorías; “Tags permitidas” (lista blanca) para autoseleccionar etiquetas.
+- Bloqueo de modelos (no se usan aunque estén en el fallback).
 
-### 2) Blog (creaciÃ³n con checkpoint)
-- TÃ­tulos: manual o desde CSV (URL).
-- ProgramaciÃ³n: â€œprimera fecha/horaâ€ + intervalo (dÃ­as). Si no hay fecha, publica inmediato.
+### 2) Blog (creación con checkpoint)
+- Títulos: manual o desde CSV (URL).
+- Programación: “primera fecha/hora” + intervalo (días). Si no hay fecha, publica inmediato.
 - Botones:
-  - Probar configuraciÃ³n.
-  - Crear Blogs (con reanudaciÃ³n): encola un evento y comienza a procesar 1 tÃ­tulo por tanda (ajustable en cÃ³digo). Reanuda automÃ¡ticamente hasta terminar.
+  - Probar configuración.
+  - Crear Blogs (con reanudación): encola un evento y comienza a procesar 1 título por tanda (ajustable en código). Reanuda automáticamente hasta terminar.
   - Detener (STOP) para cortar de forma segura.
-  - Rellenar pendientes: llama a OpenAI Images para completar los â€œpendientesâ€.
+  - Rellenar pendientes: llama a OpenAI Images para completar los “pendientes”.
   - Limpiar checkpoint / Limpiar log.
-- Estado: muestra checkpoint, Ãºltima fecha programada y log en vivo.
+- Estado: muestra checkpoint, última fecha programada y log en vivo.
 
-### 3) Costes (estimaciÃ³n y real)
-- EstimaciÃ³n rÃ¡pida por post (texto, imÃ¡genes, SEO) segÃºn configuraciones y tabla de precios.
-- CÃ¡lculo REAL â€œpostâ€‘hocâ€ sumando cada llamada guardada (modelo real por llamada). Opciones:
+### 3) Costes (estimación y real)
+- Estimación rápida por post (texto, imágenes, SEO) según configuraciones y tabla de precios.
+- Cálculo REAL “post-hoc” sumando cada llamada guardada (modelo real por llamada). Opciones:
   - Precio fijo por imagen (recomendado) con importes mini/full en USD.
   - Sobrecoste fijo por llamada de texto/SEO (USD) para cuadrar billing.
   - Multiplicador de ajuste total del coste real.
-- Acciones: â€œCalcularâ€ (usa real y, si falta, estimaciÃ³n) o â€œCalcular SOLO realâ€. Log de costes en vivo.
+- Acciones: “Calcular” (usa real y, si falta, estimación) o “Calcular SOLO real”. Log de costes en vivo.
 
 ### 4) Yoast/SEO (opcional)
-- Genera metadescripciÃ³n bÃ¡sica y focus keyphrase. Si tienes Yoast SEO activo, se aprovechan sus metas y hook para ampliar el relleno.
-- Si no usas Yoast, el post se crea igualmente (las metas quedan como metadatos estÃ¡ndar; no es requisito).
+- Genera metadescripción básica y focus keyphrase. Si tienes Yoast SEO activo, se aprovechan sus metas y hook para ampliar el relleno.
+- Si no usas Yoast, el post se crea igualmente (las metas quedan como metadatos estándar; no es requisito).
 
-### 5) DiagnÃ³stico
-- Resumen del entorno (WP, PHP, lÃ­mites, debug).
-- ComprobaciÃ³n rÃ¡pida de permisos de escritura y estado de la API Key.
-- Ãšltimas lÃ­neas del log del plugin para soporte.
+### 5) Diagnóstico
+- Resumen del entorno (WP, PHP, límites, debug).
+- Comprobación rápida de permisos de escritura y estado de la API Key.
+- Últimas líneas del log del plugin para soporte.
 
 ## Marcadores de imagen y pendientes
 
-Formato en el HTML de texto: `[IMAGEN: descripciÃ³n]`
-- El motor extrae hasta (images_limit âˆ’ 1) marcadores para contenido (la primera imagen va a destacada si procede).
-- Si faltan marcadores, inserta automÃ¡ticamente en zonas Ãºtiles (tras primer pÃ¡rrafo, antes de FAQ, cierre).
+Formato en el HTML de texto: `[IMAGEN: descripción]`
+- El motor extrae hasta (images_limit - 1) marcadores para contenido (la primera imagen va a destacada si procede).
+- Si faltan marcadores, inserta automáticamente en zonas útiles (tras primer párrafo, antes de FAQ, cierre).
 - Si sobran, los elimina.
 - Si una imagen falla, el marcador se reemplaza por: `<span class="cbia-img-pendiente" style="display:none">[IMAGEN_PENDIENTE: desc]</span>`
   - Estos spans se ocultan y no rompen el layout; el rellenado posterior los sustituye por una `<img>` real.
 
 Limpieza de artefactos
-- El motor limpia puntos sueltos tras marcadores/pendientes (`</span>.`, `</p>.`, lÃ­nea con â€œ.â€), y colapsa saltos extra.
+- El motor limpia puntos sueltos tras marcadores/pendientes (`</span>.`, `</p>.`, línea con “.”), y colapsa saltos extra.
 
-## ProgramaciÃ³n y CRON
-- Al pulsar â€œCrear Blogsâ€, se encola un evento y se procesa 1 post por tanda (para evitar timeouts). Si queda cola, reprograma la siguiente tanda.
-- Puedes activar un CRON hourly para â€œRellenar pendientesâ€.
+## Programación y CRON
+- Al pulsar “Crear Blogs”, se encola un evento y se procesa 1 post por tanda (para evitar timeouts). Si queda cola, reprograma la siguiente tanda.
+- Puedes activar un CRON hourly para “Rellenar pendientes”.
 - STOP detiene con seguridad entre pasos.
 
-## Logs y diagnÃ³stico
-- Log de actividad en vivo (AJAX) en la pestaÃ±a Blog.
+## Logs y diagnóstico
+- Log de actividad en vivo (AJAX) en la pestaña Blog.
 - Log de Costes con tokens reales y llamadas.
-- Mensajes claros en cada fase (cola, checkpoint, evento, imÃ¡genes, pendientes, etc.).
+- Mensajes claros en cada fase (cola, checkpoint, evento, imágenes, pendientes, etc.).
 
-## Requisitos e instalaciÃ³n
+## Requisitos e instalación
 - WordPress 6.9+ (probado en 6.9.0), PHP 8.2+.
 - Multisite compatible (probado en entorno multisite).
-- Clave de API de OpenAI con permisos mÃ­nimos.
-- Yoast SEO: opcional (el plugin funciona sin Ã©l).
+- Clave de API de OpenAI con permisos mínimos.
+- Yoast SEO: opcional (el plugin funciona sin él).
 
-InstalaciÃ³n:
+Instalación:
 1) Copia la carpeta en `wp-content/plugins/`.
 2) Activa el plugin.
-3) Ve a Ajustes â†’ Creador Blog IA, pon tu API Key y configura.
+3) Ve a Ajustes ? Creador Blog IA, pon tu API Key y configura.
 
-## SoluciÃ³n de problemas
-- â€œNo hace nadaâ€: revisa log; si el tÃ­tulo ya existe, se omite. AsegÃºrate de tener tÃ­tulos vÃ¡lidos (manual o CSV) y que el checkpoint no estÃ© bloqueado.
-- Puntos sueltos al final: el motor limpia casos tÃ­picos (`</span>.`, `</p>.`, lÃ­neas con â€œ.â€). Si detectas un patrÃ³n nuevo, actualiza y vuelve a procesar.
-- ImÃ¡genes que no salen: revisa el log (fallo de generaciÃ³n, cuota, red). Usa â€œRellenar pendientesâ€.
-- Costes no cuadran: activa â€œprecio fijo por imagenâ€, ajusta importes mini/full y (si hace falta) el sobrecoste por llamada y el multiplicador real.
+## Solución de problemas
+- “No hace nada”: revisa log; si el título ya existe, se omite. Asegúrate de tener títulos válidos (manual o CSV) y que el checkpoint no esté bloqueado.
+- Puntos sueltos al final: el motor limpia casos típicos (`</span>.`, `</p>.`, líneas con “.”). Si detectas un patrón nuevo, actualiza y vuelve a procesar.
+- Imágenes que no salen: revisa el log (fallo de generación, cuota, red). Usa “Rellenar pendientes”.
+- Costes no cuadran: activa “precio fijo por imagen”, ajusta importes mini/full y (si hace falta) el sobrecoste por llamada y el multiplicador real.
 
 ## Desarrollo y hooks
 Estructura (v2.3):
 - `includes/core/`: bootstrap, hooks y wiring de dependencias.
-- `includes/admin/`: controladores de pestaÃ±as y vistas (`admin/views/`).
-- `includes/engine/`: lÃ³gica de generaciÃ³n (texto, imÃ¡genes, pendientes, posts).
+- `includes/admin/`: controladores de pestañas y vistas (`admin/views/`).
+- `includes/engine/`: lógica de generación (texto, imágenes, pendientes, posts).
 - `includes/domain/`: dominios puros (p. ej., costes).
 - `includes/integrations/`: integraciones externas (Yoast, OpenAI).
 - `includes/jobs/`: CRON y tareas background.
@@ -118,21 +118,16 @@ Estructura (v2.3):
 
 Hooks disponibles:
 - `do_action('cbia_after_post_created', $post_id, $title, $html, $usage, $model_used)`
-  - Ãštil para enriquecer SEO, relacionar contenido, etc.
+  - Útil para enriquecer SEO, relacionar contenido, etc.
 
 Permisos y seguridad
 - Todas las acciones de admin requieren `manage_options` y nonce.
 
-## MigraciÃ³n legacy (plan 7.0)
-Los wrappers `includes/cbia-*.php` se mantienen solo por compatibilidad. Plan de retirada segura:
-1. 2.3.x: wrappers mÃ­nimos + aviso deprecado (solo WP_DEBUG) + mÃ©trica de uso.
-2. 6.2/6.3: aviso admin si se detecta uso y guÃ­a de migraciÃ³n.
-3. 7.0: eliminaciÃ³n de wrappers con nota de breaking change.
-
-Modo sin wrappers en desarrollo:
-1. Define `CBIA_DISABLE_LEGACY_WRAPPERS` como `true` en `wp-config.php`.
-2. Verifica que tu instalaciÃ³n no depende de los archivos antiguos.
+## Migración legacy (eliminada en 3.0)
+Los wrappers legacy (`includes/legacy/cbia-*.php`) han sido eliminados en la versión 3.0.
+Si tu instalación dependía de esos archivos, migra a las rutas nuevas en `includes/` (core/admin/engine/domain).
 
 Licencia
 - GPLv2 o posterior.
+
 

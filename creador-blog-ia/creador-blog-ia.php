@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Creador Blog IA
  * Description: Genera entradas con IA (texto + marcadores de imágenes), programa con intervalos, asigna categorías/etiquetas, guarda tokens/usage y estima costes. Incluye actualización de posts antiguos y módulo Yoast.
- * Version: 2.3
+ * Version: 3.0
  *
  * Author: Angel
  * Requires at least: 6.9
@@ -13,7 +13,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-if (!defined('CBIA_VERSION')) define('CBIA_VERSION', '2.3');
+if (!defined('CBIA_VERSION')) define('CBIA_VERSION', '3.0');
 if (!defined('CBIA_PLUGIN_FILE')) define('CBIA_PLUGIN_FILE', __FILE__);
 if (!defined('CBIA_PLUGIN_DIR')) define('CBIA_PLUGIN_DIR', plugin_dir_path(__FILE__));
 if (!defined('CBIA_PLUGIN_URL')) define('CBIA_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -24,13 +24,13 @@ if (!defined('CBIA_OPTION_LOG_COUNTER')) define('CBIA_OPTION_LOG_COUNTER', 'cbia
 if (!defined('CBIA_OPTION_STOP')) define('CBIA_OPTION_STOP', 'cbia_stop_generation');
 if (!defined('CBIA_OPTION_CHECKPOINT')) define('CBIA_OPTION_CHECKPOINT', 'cbia_checkpoint');
 
-// Bootstrap nueva estructura (v2.3) sin afectar legacy
+// Bootstrap nueva estructura (v3.0)
 $cbia_bootstrap = CBIA_INCLUDES_DIR . 'core/bootstrap.php';
 if (file_exists($cbia_bootstrap)) {
 	require_once $cbia_bootstrap;
 }
 
-// Registrar loader nuevo (si existe) sin romper legacy
+// Registrar loader nuevo
 add_action('plugins_loaded', function () {
 	if (class_exists('CBIA_Loader') && function_exists('cbia_container')) {
 		$container = cbia_container();
@@ -208,27 +208,18 @@ register_activation_hook(__FILE__, function () {
 });
 
 /**
- * Cargar módulos legacy (orden requerido)
+ * Cargar módulos core (sin legacy)
  */
-if (function_exists('cbia_load_legacy_modules')) {
-	cbia_load_legacy_modules();
-} else {
-	$cbia_modules = [
-		CBIA_INCLUDES_DIR . 'legacy/cbia-config.php',
-		CBIA_INCLUDES_DIR . 'engine/engine.php',
-		CBIA_INCLUDES_DIR . 'legacy/cbia-blog.php',
-		CBIA_INCLUDES_DIR . 'legacy/cbia-oldposts.php',
-		CBIA_INCLUDES_DIR . 'legacy/cbia-costes.php',
-		CBIA_INCLUDES_DIR . 'legacy/cbia-yoast.php',
-	];
+$cbia_modules = [
+	CBIA_INCLUDES_DIR . 'engine/engine.php',
+];
 
-	foreach ($cbia_modules as $f) {
-		if (file_exists($f)) {
-			require_once $f;
-		} else {
-			// No romper el admin: solo log
-			cbia_log('No se encontró el módulo requerido: ' . basename($f), 'ERROR');
-		}
+foreach ($cbia_modules as $f) {
+	if (file_exists($f)) {
+		require_once $f;
+	} else {
+		// No romper el admin: solo log
+		cbia_log('No se encontró el módulo requerido: ' . basename($f), 'ERROR');
 	}
 }
 
