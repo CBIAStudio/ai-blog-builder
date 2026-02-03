@@ -61,7 +61,7 @@ if (!function_exists('cbia_openai_responses_call')) {
 				$resp = wp_remote_post('https://api.openai.com/v1/responses', [
 					'headers' => cbia_http_headers_openai($api_key),
 					'body'    => wp_json_encode($payload),
-					'timeout' => 20,
+					'timeout' => 60,
 				]);
 
 				if (is_wp_error($resp)) {
@@ -150,7 +150,7 @@ if (!function_exists('cbia_generate_image_openai')) {
 				$resp = wp_remote_post('https://api.openai.com/v1/images/generations', [
 					'headers' => cbia_http_headers_openai($api_key),
 					'body'    => wp_json_encode($payload),
-					'timeout' => 20,
+					'timeout' => 60,
 				]);
 
 				if (is_wp_error($resp)) {
@@ -178,7 +178,7 @@ if (!function_exists('cbia_generate_image_openai')) {
 				if (!empty($data['data'][0]['b64_json'])) {
 					$bytes = base64_decode((string)$data['data'][0]['b64_json']);
 				} elseif (!empty($data['data'][0]['url'])) {
-					$img = wp_remote_get((string)$data['data'][0]['url'], ['timeout' => 20]);
+					$img = wp_remote_get((string)$data['data'][0]['url'], ['timeout' => 60]);
 					if (!is_wp_error($img) && (int)wp_remote_retrieve_response_code($img) === 200) {
 						$bytes = (string)wp_remote_retrieve_body($img);
 					}
