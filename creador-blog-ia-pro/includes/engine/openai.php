@@ -129,6 +129,7 @@ if (!function_exists('cbia_generate_image_openai')) {
 		$prompt = cbia_build_image_prompt($desc, $section, $title);
 		$size = cbia_image_size_for_section($section);
 		$alt  = cbia_build_img_alt($title, $section, $desc);
+		$section_label = function_exists('cbia_section_label') ? cbia_section_label($section) : (string)$section;
 
 		foreach (cbia_image_model_chain() as $model) {
 			// Si el usuario bloquea también modelos imagen en el mismo array, lo respetamos
@@ -138,7 +139,7 @@ if (!function_exists('cbia_generate_image_openai')) {
 			for ($t = 1; $t <= $tries; $t++) {
 				if (cbia_is_stop_requested()) return [false, 0, $model, 'STOP activado'];
 
-				cbia_log("Imagen IA: modelo={$model} sección={$section} intento {$t}/{$tries}", 'INFO');
+				cbia_log("Imagen IA: modelo={$model} sección={$section_label} intento {$t}/{$tries}", 'INFO');
 
 				$payload = [
 					'model'  => $model,
@@ -195,7 +196,7 @@ if (!function_exists('cbia_generate_image_openai')) {
 					continue;
 				}
 
-				cbia_log("Imagen IA OK: secciÃ³n={$section} attach_id={$attach_id}", 'INFO');
+				cbia_log("Imagen IA OK: sección={$section_label} attach_id={$attach_id}", 'INFO');
 				return [true, (int)$attach_id, $model, ''];
 			}
 		}

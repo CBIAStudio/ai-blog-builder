@@ -82,6 +82,19 @@ if (!function_exists('cbia_build_img_alt')) {
     }
 }
 
+if (!function_exists('cbia_section_label')) {
+    /**
+     * Etiqueta legible para logs/UX.
+     */
+    function cbia_section_label($section) {
+        $section = strtolower((string)$section);
+        if ($section === 'intro' || $section === 'featured' || $section === 'destacada') return 'destacada';
+        if ($section === 'conclusion' || $section === 'cierre') return 'cierre';
+        if ($section === 'faq') return 'faq';
+        return 'cuerpo';
+    }
+}
+
 if (!function_exists('cbia_detect_marker_section')) {
     function cbia_detect_marker_section($html, $marker_pos, $is_first) {
         $len = strlen((string)$html);

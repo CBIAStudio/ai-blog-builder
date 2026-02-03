@@ -189,6 +189,7 @@ if (!function_exists('cbia_create_single_blog_post')) {
 
 			$desc = trim((string)($mk['desc'] ?? ''));
 			$section = cbia_detect_marker_section($text_html, (int)$mk['pos'], $i === 0);
+			$section_label = function_exists('cbia_section_label') ? cbia_section_label($section) : (string)$section;
 
 			list($img_ok, $attach_id, $img_model, $img_err) = cbia_generate_image_openai($desc, $section, $title);
 			$image_calls[] = [
@@ -206,7 +207,7 @@ if (!function_exists('cbia_create_single_blog_post')) {
 				$img_tag = cbia_build_content_img_tag($url, $alt, $section);
 
 				$text_html = cbia_replace_first_occurrence($text_html, $mk['full'], $img_tag);
-				cbia_log("Imagen insertada en contenido: secciÃ³n={$section}", 'INFO');
+				cbia_log("Imagen insertada OK en contenido: sección={$section_label}", 'INFO');
 			} else {
 				$desc_clean = cbia_sanitize_alt_from_desc($desc);
 				$pending_list[] = [
@@ -220,7 +221,7 @@ if (!function_exists('cbia_create_single_blog_post')) {
 				];
 				$placeholder = "<span class='cbia-img-pendiente' style='display:none'>[IMAGEN_PENDIENTE: {$desc_clean}]</span>";
 				$text_html = cbia_replace_first_occurrence($text_html, $mk['full'], $placeholder);
-				cbia_log("Imagen pendiente en contenido: secciÃ³n={$section} err=" . ($img_err ?: 'unknown'), 'WARN');
+				cbia_log("Imagen pendiente en contenido: sección={$section_label} err=" . ($img_err ?: 'unknown'), 'WARN');
 			}
 		}
 
