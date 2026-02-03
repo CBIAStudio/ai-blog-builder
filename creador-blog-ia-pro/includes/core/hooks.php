@@ -267,19 +267,12 @@ if (!function_exists('cbia_ajax_start_generation')) {
             ? $blog_service->run_generate_blogs($max_per_run)
             : cbia_run_generate_blogs($max_per_run);
 
-        if (is_array($result) && empty($result['done'])) {
-            if (function_exists('cbia_log_message')) {
-                cbia_log_message('[INFO] START: Queda cola -> encolando evento background.');
-            }
-            if ($blog_service) {
-                $blog_service->schedule_generation_event(6, true);
-            } elseif (function_exists('cbia_schedule_generation_event')) {
-                cbia_schedule_generation_event(6, true);
-            }
-        } else {
-            if (function_exists('cbia_log_message')) {
-                cbia_log_message('[INFO] START: No queda cola pendiente.');
-            }
+        // No encolar aqui: cbia_run_generate_blogs ya gestiona el scheduling si queda cola.
+        if (function_exists('cbia_log_message')) {
+            cbia_log_message(empty($result['done'])
+                ? '[INFO] START: Cola pendiente, el scheduler continuara.'
+                : '[INFO] START: No queda cola pendiente.'
+            );
         }
 
         wp_send_json_success(['ok' => 1, 'result' => $result]);
