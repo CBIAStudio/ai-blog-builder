@@ -16,7 +16,9 @@ if (!class_exists('CBIA_Logger')) {
                 cbia_log((string)$msg, $level);
                 return;
             }
-            error_log('[CBIA][' . $level . '] ' . (string)$msg);
+            if (defined('WP_DEBUG') && WP_DEBUG && function_exists('error_log')) {
+                error_log('[CBIA][' . $level . '] ' . (string)$msg);
+            }
         }
 
         public function info($msg) { $this->write('INFO', $msg); }

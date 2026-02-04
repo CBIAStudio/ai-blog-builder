@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 // File: includes/engine/blog.php
 if (!defined('ABSPATH')) exit;
 
@@ -53,7 +53,9 @@ if (!function_exists('cbia_log_message')) {
         wp_cache_delete(cbia_log_key(), 'options');
         wp_cache_delete(cbia_log_counter_key(), 'options');
 
-        if (function_exists('error_log')) error_log('[CBIA] ' . trim($message));
+        if (defined('WP_DEBUG') && WP_DEBUG && function_exists('error_log')) {
+            error_log('[CBIA] ' . trim($message));
+        }
     }
 }
 
@@ -125,7 +127,7 @@ if (!function_exists('cbia_blog_handle_post')) {
             }
         }
         if (!is_admin() || !current_user_can('manage_options')) return '';
-        if ($_SERVER['REQUEST_METHOD'] !== 'POST') return '';
+        if (!isset($_SERVER['REQUEST_METHOD']) || $_SERVER['REQUEST_METHOD'] !== 'POST') return '';
 
         $post_unslashed = wp_unslash($_POST);
         $saved_notice = '';

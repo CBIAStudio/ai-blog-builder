@@ -19,7 +19,9 @@ if (!isset($s['responses_max_output_tokens'])) $s['responses_max_output_tokens']
 if (!isset($s['openai_consent'])) $s['openai_consent'] = 0;
 if (!isset($s['default_author_id'])) $s['default_author_id'] = 0;
 
-if (isset($_GET['saved'])) {
+// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- aviso informativo
+$saved = isset($_GET['saved']) ? sanitize_text_field(wp_unslash((string) $_GET['saved'])) : '';
+if ($saved !== '') {
     echo '<div class="notice notice-success is-dismissible"><p>Configuracion guardada.</p></div>';
 }
 
@@ -52,10 +54,28 @@ wp_dropdown_users($args);
 $dd = ob_get_clean();
 $dd = str_replace('class=\'', 'style="width:420px;" class=\'', $dd);
 $dd = str_replace('class="', 'style="width:420px;" class="', $dd);
+$dd_safe = wp_kses(
+    $dd,
+    [
+        'select' => [
+            'name' => true,
+            'id' => true,
+            'class' => true,
+            'style' => true,
+        ],
+        'option' => [
+            'value' => true,
+            'selected' => true,
+        ],
+        'optgroup' => [
+            'label' => true,
+        ],
+    ]
+);
 
 echo '<tr><th scope="row"><label>Autor por defecto</label></th><td>';
 echo '<p class="description">Recomendado para ejecuciones automaticas.</p>';
-echo $dd;
+echo $dd_safe;
 echo '</td></tr>';
 
 $models = function_exists('cbia_get_allowed_models_for_ui') ? cbia_get_allowed_models_for_ui() : [$recommended];

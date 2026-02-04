@@ -41,7 +41,7 @@ if (!function_exists('cbia_admin_posts_list_button')) {
         if (!$screen || $screen->base !== 'edit' || $screen->post_type !== 'post') return;
 
         $url = admin_url('admin.php?page=cbia&tab=blog');
-        $label = 'Añadir entrada con IA';
+        $label = 'A�adir entrada con IA';
 
         echo "<style>.cbia-add-ai{margin-left:6px;background:#2271b1;color:#fff;border-color:#2271b1}</style>\n";
         echo "<script>(function(){function addBtn(){var target=document.querySelector('.wrap .page-title-action');if(!target||document.querySelector('.cbia-add-ai'))return;var a=document.createElement('a');a.className='page-title-action cbia-add-ai';a.href=" . json_encode($url) . ";a.textContent=" . json_encode($label) . ";target.insertAdjacentElement('afterend',a);}if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',addBtn);}else{addBtn();}})();</script>\n";
@@ -57,35 +57,34 @@ if (!function_exists('cbia_admin_enqueue_inline')) {
         $ajax_url = admin_url('admin-ajax.php');
         $nonce = wp_create_nonce('cbia_ajax_nonce');
 
-        $js = <<<JS
-(function($){
-  window.CBIA = window.CBIA || {};
-  CBIA.ajaxUrl = "{$ajax_url}";
-  CBIA.nonce = "{$nonce}";
-
-  CBIA.fetchLog = function(targetSelector){
-    return $.post(CBIA.ajaxUrl, {action:'cbia_get_log', _ajax_nonce: CBIA.nonce})
-      .done(function(res){
-        if(res && res.success && res.data){
-          $(targetSelector).val(res.data.log || '');
-        }
-      });
-  };
-
-  CBIA.clearLog = function(targetSelector){
-    return $.post(CBIA.ajaxUrl, {action:'cbia_clear_log', _ajax_nonce: CBIA.nonce})
-      .done(function(res){
-        if(res && res.success){
-          $(targetSelector).val('');
-        }
-      });
-  };
-
-  CBIA.setStop = function(stop){
-    return $.post(CBIA.ajaxUrl, {action:'cbia_set_stop', stop: stop ? 1 : 0, _ajax_nonce: CBIA.nonce});
-  };
-})(jQuery);
-JS;
+        $js =
+            "(function($){\n" .
+            "  window.CBIA = window.CBIA || {};\n" .
+            "  CBIA.ajaxUrl = " . wp_json_encode($ajax_url) . ";\n" .
+            "  CBIA.nonce = " . wp_json_encode($nonce) . ";\n" .
+            "\n" .
+            "  CBIA.fetchLog = function(targetSelector){\n" .
+            "    return $.post(CBIA.ajaxUrl, {action:'cbia_get_log', _ajax_nonce: CBIA.nonce})\n" .
+            "      .done(function(res){\n" .
+            "        if(res && res.success && res.data){\n" .
+            "          $(targetSelector).val(res.data.log || '');\n" .
+            "        }\n" .
+            "      });\n" .
+            "  };\n" .
+            "\n" .
+            "  CBIA.clearLog = function(targetSelector){\n" .
+            "    return $.post(CBIA.ajaxUrl, {action:'cbia_clear_log', _ajax_nonce: CBIA.nonce})\n" .
+            "      .done(function(res){\n" .
+            "        if(res && res.success){\n" .
+            "          $(targetSelector).val('');\n" .
+            "        }\n" .
+            "      });\n" .
+            "  };\n" .
+            "\n" .
+            "  CBIA.setStop = function(stop){\n" .
+            "    return $.post(CBIA.ajaxUrl, {action:'cbia_set_stop', stop: stop ? 1 : 0, _ajax_nonce: CBIA.nonce});\n" .
+            "  };\n" .
+            "})(jQuery);\n";
 
         wp_add_inline_script('jquery', $js, 'after');
     }
@@ -173,13 +172,7 @@ if (!function_exists('cbia_ajax_get_checkpoint_status')) {
 
 if (!function_exists('cbia_ajax_start_generation')) {
     function cbia_ajax_start_generation() {
-        $nonce = '';
-        if (isset($_REQUEST['_ajax_nonce'])) $nonce = (string)$_REQUEST['_ajax_nonce'];
-        if ($nonce === '' && isset($_REQUEST['_wpnonce'])) $nonce = (string)$_REQUEST['_wpnonce'];
-        if ($nonce === '' && isset($_REQUEST['nonce'])) $nonce = (string)$_REQUEST['nonce'];
-        if ($nonce === '' || !wp_verify_nonce($nonce, 'cbia_ajax_nonce')) {
-            wp_send_json_error(['msg' => 'bad_nonce'], 403);
-        }
+        check_ajax_referer('cbia_ajax_nonce');
         if (!current_user_can('manage_options')) wp_send_json_error(['msg' => 'No autorizado'], 403);
 
         if (!function_exists('cbia_set_stop_flag')) {

@@ -214,12 +214,12 @@ $cbia_modules = [
 	CBIA_INCLUDES_DIR . 'engine/engine.php',
 ];
 
-foreach ($cbia_modules as $f) {
-	if (file_exists($f)) {
-		require_once $f;
+foreach ($cbia_modules as $cbia_file){
+	if (file_exists($cbia_file)) {
+		require_once $cbia_file;
 	} else {
 		// No romper el admin: solo log
-		cbia_log('No se encontró el módulo requerido: ' . basename($f), 'ERROR');
+		cbia_log('No se encontró el módulo requerido: ' . basename($cbia_file), 'ERROR');
 	}
 }
 
@@ -261,7 +261,8 @@ if (!function_exists('cbia_get_admin_tabs')) {
 
 if (!function_exists('cbia_get_current_tab')) {
 	function cbia_get_current_tab(): string {
-		$tab = isset($_GET['tab']) ? sanitize_key((string) $_GET['tab']) : 'config';
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- navegación por pestañas
+		$tab = isset($_GET['tab']) ? sanitize_key(wp_unslash((string) $_GET['tab'])) : 'config';
 		$tabs = cbia_get_admin_tabs();
 		return isset($tabs[$tab]) ? $tab : 'config';
 	}
@@ -284,8 +285,8 @@ if (!function_exists('cbia_render_admin_page')) {
 		foreach ($tabs as $tab_key => $tab_data) {
 			$label = $tab_data['label'] ?? $tab_key;
 			$url = admin_url('admin.php?page=cbia&tab=' . $tab_key);
-			$active = $tab_key === $current ? ' nav-tab-active' : '';
-			echo '<a href="' . esc_url($url) . '" class="nav-tab' . $active . '">' . esc_html($label) . '</a>';
+			$class = 'nav-tab' . ($tab_key === $current ? ' nav-tab-active' : '');
+			echo '<a href="' . esc_url($url) . '" class="' . esc_attr($class) . '">' . esc_html($label) . '</a>';
 		}
 
 		echo '</h2>';
