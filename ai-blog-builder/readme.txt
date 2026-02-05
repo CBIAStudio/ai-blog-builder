@@ -30,9 +30,9 @@ How it works:
 
 == Installation ==
 
-1. Upload the ZIP in Plugins â†’ Add New â†’ Upload Plugin
+1. Upload the ZIP in Plugins → Add New → Upload Plugin
 2. Activate the plugin
-3. Go to Settings â†’ AI Blog Builder
+3. Go to Settings → AI Blog Builder
 4. Add your OpenAI API key and accept consent
 5. Configure and start generating
 
