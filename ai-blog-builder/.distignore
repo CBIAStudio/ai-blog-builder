@@ -1,0 +1,9 @@
+.gitignore
+.gitattributes
+.github
+*.zip
+*.tar
+*.tar.gz
+*.ps1
+*.bat
+*.md
