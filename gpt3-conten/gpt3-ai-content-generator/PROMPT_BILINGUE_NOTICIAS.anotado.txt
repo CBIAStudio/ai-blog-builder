@@ -1,0 +1,82 @@
+﻿[INFO] No se detectaron funciones en este archivo.
+
+BILINGUAL PROMPT (EN + ES)
+Generated: 2026-02-07 13:12:04
+Write a FULL POST in HTML for "{title}", optimized for Google Discover, with an approximate length of 1800?2100 words (?10%).
+LANGUAGE RULE (MANDATORY)
+- ALL content must be written in the same language.
+- This includes titles, headings, FAQs, and answers.
+- Using any other language is FORBIDDEN (except the title {title} if it is in another language).
+The content must prioritize human interest, fluent reading, cultural context, and real experience.
+Avoid traditional SEO and do not force exact keywords.
+TONE & STYLE
+- Professional, friendly, and natural.
+- Editorial and cultural, not encyclopedic.
+- Narrative when appropriate, with judgment and point of view.
+- Written for readers who were not actively searching for the topic.
+MANDATORY STRUCTURE (do not add or remove sections)
+1) One heading using the <h2> tag
+    Opening paragraph using <p>.
+   - Do NOT use the word ?Introduction? or equivalents.
+   - Length: 180?220 words.
+2) Three main blocks, each with:
+   - (Optional) a <h3> subtitle ONLY if it adds real clarity.
+   - Length: 250?300 words per block.
+   - Lists ONLY when they help comprehension (<ul> and <li>).
+3) FAQ section:
+   - One <h2> heading whose text must be the natural equivalent of ?Frequently Asked Questions? in that language.
+   - Six FAQs, each with:
+     - Question in <h3>.
+     - Answer in <p> (120?150 words).
+CRITICAL INSTRUCTION
+- No answer must be cut off.
+- ALL answers must end with a period.
+MANDATORY RULES
+- Do NOT use the <h1> tag.
+- Do NOT add a conclusion section.
+- Do NOT include a final CTA.
+- Do NOT use the tags: doctype, html, head, body, script, style, iframe, table, blockquote.
+- Do NOT link to external websites (use plain text ?(internal link)? if needed).
+- Avoid redundancy and filler phrases.
+- Do not write with keyword-exact SEO focus.
+The result must read like a premium editorial article, interesting on its own and suitable for Google Discover.
+---
+Escribe un POST COMPLETO en HTML para "{title}", optimizado para Google Discover, con una extensi?n aproximada de 1800?2100 palabras (?10%).
+REGLA DE IDIOMA (OBLIGATORIA)
+- TODO el contenido debe estar escrito en el mismo idioma.
+- Esto incluye t?tulos, encabezados, preguntas frecuentes y respuestas.
+- Est? PROHIBIDO usar cualquier otro idioma en el contenido (salvo el t?tulo {title} si viene en otro idioma).
+El contenido debe priorizar inter?s humano, lectura fluida, contexto cultural y experiencia real.
+Evita el enfoque de SEO tradicional y no fuerces keywords exactas.
+TONO Y ESTILO
+- Profesional, cercano y natural.
+- Editorial y cultural, no enciclop?dico.
+- Narrativo cuando sea adecuado, con criterio y punto de vista.
+- Pensado para lectores que no estaban buscando activamente el tema.
+ESTRUCTURA OBLIGATORIA (no a?adir ni eliminar secciones)
+1) Un encabezado usando la etiqueta <h2>
+    P?rrafo inicial usando la etiqueta <p>.
+   - NO usar la palabra ?Introducci?n? ni equivalentes.
+   - Extensi?n: 180?220 palabras.
+2) Tres bloques principales, cada uno con:
+   - (Opcional) un subt?tulo usando la etiqueta <h3> SOLO si aporta claridad real.
+   - Extensi?n: 250?300 palabras por bloque.
+   - Listas SOLO cuando ayuden a la comprensi?n (etiquetas <ul> y <li>).
+3) Secci?n de preguntas frecuentes:
+   - Un encabezado <h2> cuyo texto debe estar escrito en el equivalente natural a ?Preguntas frecuentes? en ese idioma.
+   - Seis preguntas frecuentes, cada una con:
+     - Pregunta en etiqueta <h3>.
+     - Respuesta en etiqueta <p> (120?150 palabras).
+INSTRUCCI?N CR?TICA
+- Ninguna respuesta debe cortarse.
+- TODAS las respuestas deben terminar en punto final.
+REGLAS DE OBLIGADO CUMPLIMIENTO
+- NO usar la etiqueta <h1>.
+- NO a?adir secci?n de conclusi?n.
+- NO incluir CTA final.
+- NO usar las etiquetas: doctype, html, head, body, script, style, iframe, table, blockquote.
+- NO enlazar a webs externas (usar el texto plano ?(enlace interno)? si es necesario).
+- Evitar redundancias y muletillas.
+- No escribir con enfoque SEO por keyword exacta.
+El resultado debe leerse como un art?culo editorial premium, interesante por s? mismo y adecuado para aparecer en Google Discover.
+

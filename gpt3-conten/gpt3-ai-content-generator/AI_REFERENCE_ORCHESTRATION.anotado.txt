@@ -1,0 +1,204 @@
+﻿================================================================================
+FUNCION: generate_response
+Resumen: Función que maneja $human.
+CODIGO:
+function generate_response(
+    \WPAICG\Chat\Core\AIService $serviceInstance,
+    string $user_message,
+    array $bot_settings,
+    array $history,
+    int $post_id = 0,
+    ?string $frontend_previous_openai_response_id = null,
+    bool $frontend_openai_web_search_active = false,
+    bool $frontend_google_search_grounding_active = false,
+    ?array $image_inputs_for_service = null,
+    ?string $frontend_active_openai_vs_id = null,
+    ?string $frontend_active_pinecone_index_name = null,
+    ?string $frontend_active_pinecone_namespace = null,
+    ?string $frontend_active_qdrant_collection_name = null,
+    ?string $frontend_active_qdrant_file_upload_context_id = null
+): array|WP_Error {
+    $ai_caller = $serviceInstance->get_ai_caller();
+    $vector_store_manager = $serviceInstance->get_vector_store_manager(); // Get Vector Store Manager
+
+    $validation_result = GenerateResponse\validate_request_logic($ai_caller, $user_message, $image_inputs_for_service, $bot_settings);
+    if (is_wp_error($validation_result)) {
+        return $validation_result;
+    }
+
+    $provider_info = determine_provider_model($serviceInstance, $bot_settings);
+    $main_provider = $provider_info['provider'];
+    $model = $provider_info['model'];
+    if (empty($model)) {
+        return new WP_Error('missing_model_orchestrator', __('Chatbot AI Model or Deployment Name is missing in settings.', 'gpt3-ai-content-generator'));
+    }
+
+    $im_load_result = GenerateResponse\load_instruction_manager_logic();
+    if (is_wp_error($im_load_result)) {
+        return $im_load_result;
+    }
+
+    $vector_search_scores = []; // Initialize array to capture vector search scores
+    $all_formatted_results_for_instruction = GenerateResponse\prepare_vector_search_context_logic(
+        $ai_caller, // Pass AI Caller
+        $vector_store_manager, // Pass Vector Store Manager
+        $user_message,
+        $bot_settings,
+        $main_provider,
+        $frontend_active_openai_vs_id,
+        $frontend_active_pinecone_index_name,
+        $frontend_active_pinecone_namespace,
+        $frontend_active_qdrant_collection_name,
+        $frontend_active_qdrant_file_upload_context_id,
+        $vector_search_scores // Pass reference to capture scores
+    );
+
+    $base_instructions = $bot_settings['instructions'] ?? '';
+    $instruction_context_for_logging = [
+        'bot_settings' => $bot_settings, 
+        'post_id' => $post_id, 
+        'vector_search_results' => $all_formatted_results_for_instruction,
+        'vector_search_scores' => $vector_search_scores // Add vector search scores for logging
+    ];
+    $instructions_processed = GenerateResponse\build_final_system_instruction_logic($bot_settings, $post_id, $base_instructions, $all_formatted_results_for_instruction);
+
+    $messages_prep_result = GenerateResponse\prepare_messages_for_api_logic($history, $user_message);
+    $messages_payload = $messages_prep_result['messages_payload'];
+    $latest_user_message_obj_for_stateful = $messages_prep_result['latest_user_message_obj_for_stateful'];
+    $last_openai_response_id_from_history = $messages_prep_result['last_openai_response_id_from_history'];
+
+    $ai_params_override_from_config = [];
+    if (isset($bot_settings['temperature'])) {
+        $ai_params_override_from_config['temperature'] = floatval($bot_settings['temperature']);
+    }
+    if (isset($bot_settings['max_completion_tokens'])) {
+        $ai_params_override_from_config['max_completion_tokens'] = absint($bot_settings['max_completion_tokens']);
+    }
+    if (!empty($image_inputs_for_service)) {
+        $ai_params_override_from_config['image_inputs'] = $image_inputs_for_service;
+    }
+
+    $final_ai_params_result = GenerateResponse\prepare_final_ai_params_logic(
+        $ai_params_override_from_config,
+        $bot_settings,
+        $main_provider,
+        $model,
+        $frontend_previous_openai_response_id,
+        $last_openai_response_id_from_history,
+        $messages_payload,
+        $frontend_openai_web_search_active,
+        $frontend_google_search_grounding_active,
+        $frontend_active_openai_vs_id
+    );
+    $final_ai_params = $final_ai_params_result['final_ai_params'];
+    $actual_previous_response_id_to_use = $final_ai_params_result['actual_previous_response_id_to_use'];
+
+    $ai_call_result = GenerateResponse\execute_ai_call_logic(
+        $ai_caller,
+        $main_provider,
+        $model,
+        $messages_payload,
+        $final_ai_params,
+        $instructions_processed,
+        $instruction_context_for_logging
+    );
+
+    if (is_wp_error($ai_call_result)) {
+        $triggers_enabled = false;
+        if (class_exists('\WPAICG\aipkit_dashboard')) {
+            $triggers_enabled = \WPAICG\aipkit_dashboard::is_pro_plan();
+        }
+        GenerateResponse\handle_ai_call_error_logic(
+            $ai_call_result,
+            $triggers_enabled,
+            $serviceInstance->get_log_storage(),
+            [],
+            $main_provider,
+            $model,
+            $bot_settings['bot_id'] ?? 0
+        );
+        return $ai_call_result;
+    }
+
+    return GenerateResponse\finalize_ai_response_logic(
+        $ai_call_result,
+        $main_provider,
+        $model,
+        $history,
+        $base_instructions,
+        $final_ai_params,
+        $actual_previous_response_id_to_use
+    );
+}
+
+================================================================================
+FUNCION: execute_ai_call_logic
+Resumen (del comentario): Executes the AI call using AIPKit_AI_Caller. @param \WPAICG\Core\AIPKit_AI_Caller $ai_caller Instance of AI Caller. @param string $main_provider The main AI provider. @param string $model The selected AI model. @param array $messages_payload The prepared messages payload for the API. @param array $final_ai_params The final AI parameters. @param string $instructions_processed The processed system instruction. @param array $instruction_context_for_logging Context used for instruction building (for logging). @return array|WP_Error The result from AI Caller.
+CODIGO:
+function execute_ai_call_logic(
+    \WPAICG\Core\AIPKit_AI_Caller $ai_caller,
+    string $main_provider,
+    string $model,
+    array $messages_payload,
+    array $final_ai_params,
+    string $instructions_processed,
+    array $instruction_context_for_logging
+): array|WP_Error {
+    return $ai_caller->make_standard_call(
+        $main_provider,
+        $model,
+        $messages_payload,
+        $final_ai_params,
+        $instructions_processed,
+        $instruction_context_for_logging // Pass context for logging
+    );
+}
+
+================================================================================
+FUNCION: prepare_messages_for_api_logic
+Resumen (del comentario): Prepares the messages array for the API call and extracts relevant info for stateful OpenAI. @param array $history Conversation history. @param string $user_message_text The latest user message. @return array Contains 'messages_payload', 'latest_user_message_obj_for_stateful', 'last_openai_response_id_from_history'.
+CODIGO:
+function prepare_messages_for_api_logic(array $history, string $user_message_text): array
+{
+    $messages_payload = [];
+    $latest_user_message_obj_for_stateful = null;
+    $last_openai_response_id_from_history = null;
+
+    foreach ($history as $msg) {
+        $role = ($msg['role'] === 'bot') ? 'assistant' : $msg['role'];
+        $content = isset($msg['content']) ? trim($msg['content']) : '';
+        if ($content !== '' && in_array($role, ['system', 'user', 'assistant'])) {
+            $messages_payload[] = ['role' => $role, 'content' => $content];
+            if ($role === 'user' && $msg['content'] === $user_message_text) { // Assuming history includes the current user message for this logic
+                $latest_user_message_obj_for_stateful = ['role' => 'user', 'content' => $content];
+            }
+        }
+        if (($role === 'assistant' || $role === 'bot') && isset($msg['openai_response_id']) && !empty($msg['openai_response_id'])) {
+            $last_openai_response_id_from_history = $msg['openai_response_id'];
+        }
+    }
+    // Note: The original AIService::generate_response adds the current user message to history
+    // *after* limiting it, then loops through this potentially modified history.
+    // For this refactor, this function receives the already limited $history.
+    // The current $user_message_text is the latest message from the user.
+    // The AI_Caller will typically add the latest user message to the final payload.
+    // This function here primarily formats the existing $history for the API.
+    // Let's adjust to assume $history is the *previous* history, and add $user_message_text here.
+    // No, the original AIService directly adds $user_message as the last item to the history array for some providers,
+    // and for OpenAI stateful, it uses only the latest user message.
+    // The AIPKit_AI_Caller's format_chat_completions_payload actually expects the latest user message separately.
+    // Let's stick to what AIPKit_AI_Caller expects for $messages_payload (which is history + latest user message).
+    // This means this function should append the current user message to the $messages_payload.
+    if (!empty($user_message_text)) {
+        $messages_payload[] = ['role' => 'user', 'content' => $user_message_text];
+        $latest_user_message_obj_for_stateful = ['role' => 'user', 'content' => $user_message_text];
+    }
+
+
+    return [
+        'messages_payload' => $messages_payload,
+        'latest_user_message_obj_for_stateful' => $latest_user_message_obj_for_stateful,
+        'last_openai_response_id_from_history' => $last_openai_response_id_from_history
+    ];
+}
+

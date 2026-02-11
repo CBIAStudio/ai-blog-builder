@@ -1,0 +1,364 @@
+# Explicación del Article Preview en el Generador de Blog
+
+## Resumen
+Basándome en los archivos de documentación en la carpeta `gpt3-conten`, he encontrado información sobre cómo funciona el **Article Preview** (Vista Previa del Artículo) cuando haces clic en el botón "Generate" del blog.
+
+## Ubicación de la Información
+
+La información principal se encuentra en estos archivos:
+
+- **README.anotado.txt** - Documentación general del plugin
+- **AI_REFERENCE_SNIPPETS.anotado.txt** - Fragmentos de código con la implementación
+- **AI_REFERENCE_PROMPTS.anotado.txt** - Prompts utilizados para generar contenido
+- **AI_REFERENCE_ORCHESTRATION.anotado.txt** - Lógica de orquestación de la generación
+
+## Funcionalidad del Content Writer
+
+### Mejoras Recientes (Versión 2.3.54-2.3.58)
+
+Según el README, las versiones recientes incluyen mejoras específicas para los **previews**:
+
+> **Improved**: Content Writer previews, image handling, and knowledge base (RAG) controls.
+
+Esto indica que el sistema de previews fue mejorado para:
+- Mostrar vistas previas del contenido generado
+- Manejar imágenes
+- Controlar la base de conocimientos (RAG)
+
+### Workflow del Blog Post Generator
+
+El plugin incluye un formulario predeterminado llamado **"Blog Post Generator"** que tiene la siguiente estructura:
+
+#### Campos del Formulario:
+1. **Blog Post Topic / Title** - El tema principal del artículo
+2. **Target Audience** - Audiencia objetivo (ej: "Tech enthusiasts, beginners")
+3. **Desired Length** - Longitud deseada:
+   - Short (~500 words)
+   - Medium (~1000 words)  
+   - Long (1500+ words)
+4. **Tone of Voice** - Tono del contenido:
+   - Professional
+   - Casual
+   - Witty
+   - Persuasive
+5. **Keywords** - Palabras clave separadas por comas (opcional)
+
+#### Prompt Template
+
+El sistema utiliza este prompt para generar el artículo:
+
+```
+You are an expert SEO content writer and professional blogger. Your task is to write a high-quality, engaging, and SEO-friendly blog post.
+
+**Instructions:**
+1. **Analyze the Input:** Carefully consider the provided topic, target audience, desired length, and tone.
+2. **Structure the Article:** The article must have a clear structure:
+   - An engaging introduction that hooks the reader.
+   - A well-organized body with multiple sections, using H2 and H3 headings.
+   - A concise and impactful conclusion that summarizes the key points.
+3. **Incorporate Keywords:** Naturally weave the provided keywords throughout the article, especially in headings and the introduction.
+4. **Tone:** Strictly adhere to the specified tone of voice.
+5. **Length:** Adjust the depth and detail of the content to match the desired length.
+6. **Output:** Return only the full article content in Markdown format. Do not include any pre-amble, notes, or post-article commentary.
+
+---
+**Blog Post Details:**
+* **Topic/Title:** {topic}
+* **Target Audience:** {audience}
+* **Desired Length:** {length}
+* **Tone of Voice:** {tone}
+* **Keywords:** {keywords}
+---
+
+Begin the blog post now:
+```
+
+## Prompts Predeterminados para Generación de Contenido
+
+El sistema tiene varios prompts predeterminados para generar diferentes partes del artículo:
+
+### 1. **Título** (`get_default_title_prompt`)
+```
+You are an expert SEO copywriter. Write a powerful and engaging SEO title that:
+- Starts with the main focus keyword
+- Stays concise and fits typical search-result length (about 8-12 words)
+- Includes at least one power word (e.g., Stunning, Must-Have, Exclusive)
+- Includes a positive or negative sentiment word (e.g., Best, Effortless, Affordable)
+
+Return ONLY the title text on a single line with no extra text or annotations.
+
+Topic: "{topic}"
+Keywords: "{keywords}"
+```
+
+### 2. **Contenido del Artículo** (`get_default_content_prompt`)
+```
+Write a full article based on the topic and keywords below. The article must:
+- Be at least 600 words long
+- Include the focus keyword in one or more subheadings (H2, H3, etc.)
+- Start the first paragraph with the focus keyword
+- Be informative, structured, and engaging
+- Use natural tone and clear formatting
+- Avoid repeating the title in the content
+
+Topic: "{topic}"
+Keywords: "{keywords}"
+```
+
+### 3. **Meta Descripción** (`get_default_meta_prompt`)
+```
+Write a meta description (under 155 characters) for a page about the following topic. The description must:
+- Begin with or include the focus keyword early
+- Use active voice and a clear call-to-action
+- Be concise and engaging
+
+Return ONLY the plain meta description without any quotation marks, labels, or formatting.
+
+Topic: "{topic}"
+Keywords: "{keywords}"
+Summary: "{content_summary}"
+```
+
+### 4. **Focus Keyword** (`get_default_keyword_prompt`)
+```
+Identify the single most important and relevant SEO focus keyphrase for the article based on the title and summary. The keyphrase must:
+- Be 2–4 words
+- Be naturally found in the content
+- Be suitable for SEO targeting
+
+Return ONLY the keyphrase, with no labels, formatting, or quotation marks.
+
+Title: "{topic}"
+Summary: {content_summary}
+```
+
+### 5. **Excerpt** (`get_default_excerpt_prompt`)
+```
+Write a short excerpt (1–2 engaging sentences) for the following article. Use a friendly, clear tone. Include the focus keyword naturally.
+
+Return ONLY the excerpt, without any formatting or explanation.
+
+Title: "{topic}"
+Keywords: "{keywords}"
+Summary: "{content_summary}"
+```
+
+### 6. **Tags** (`get_default_tags_prompt`)
+```
+Generate 5–10 relevant SEO tags for a blog post about the following topic. Tags must reflect key themes and keywords.
+
+Return ONLY a comma-separated list of tags. Do not include any explanation, numbering, or formatting.
+
+Title: "{topic}"
+Keywords: "{keywords}"
+Summary: {content_summary}
+```
+
+## Cómo Funciona el Preview
+
+Basándome en la información encontrada, el flujo de trabajo es el siguiente:
+
+### Paso 1: Usuario Completa el Formulario
+El usuario ingresa:
+- Tema del artículo
+- Audiencia objetivo
+- Longitud deseada
+- Tono de voz
+- Palabras clave (opcional)
+
+### Paso 2: Generación del Contenido
+Cuando el usuario hace clic en "Generate":
+
+1. **Se construye el prompt** usando la plantilla y los datos ingresados
+2. **Se llama a la API de AI** (OpenAI, Google Gemini, etc.) con el prompt
+3. **Se genera el contenido** en formato Markdown
+4. **Se muestra el preview** del artículo generado
+
+### Paso 3: Vista Previa (Article Preview)
+El preview muestra:
+- **Título** del artículo
+- **Contenido completo** con formato (H2, H3, párrafos, etc.)
+- **Extracto** (excerpt)
+- Posiblemente **meta descripción** y **tags**
+
+### Paso 4: Opciones Post-Generación
+Después de ver el preview, el usuario puede:
+- **Publicar** el artículo directamente
+- **Guardar como borrador** (Draft)
+- **Editar** el contenido antes de publicar
+- **Regenerar** con diferentes parámetros
+
+## Características Adicionales
+
+### Generación de Imágenes
+El sistema también puede generar:
+- **Imagen destacada** (Featured Image)
+- **Imágenes dentro del contenido** (In-content Images)
+- **Metadatos de imagen** (título, alt text, caption, descripción)
+
+### SEO Optimization
+El contenido generado incluye:
+- **Focus keyword** identificado automáticamente
+- **Meta description** optimizada
+- **Tags SEO** relevantes
+- **Estructura de headings** (H2, H3) con keywords
+
+### Formatos de Salida
+El contenido se genera en **Markdown** y se puede:
+- Insertar en el **Block Editor** (Gutenberg)
+- Insertar en el **Classic Editor**
+- Exportar o copiar
+
+## Archivos Relevantes para Más Detalles
+
+Si necesitas profundizar en la implementación técnica:
+
+1. **AI_REFERENCE_SNIPPETS.anotado.txt** - Líneas 1520-1560 para el Blog Post Generator
+2. **AI_REFERENCE_PROMPTS.anotado.txt** - Para todos los prompts predeterminados
+3. **README.anotado.txt** - Líneas 208, 215 para mejoras de preview
+
+## Conclusión
+
+El **Article Preview** es parte del módulo **Content Writer** del plugin AIP (AI Power). Cuando haces clic en "Generate":
+
+1. Se envía un prompt estructurado a la API de AI
+2. La AI genera el contenido completo del artículo
+3. Se muestra un preview con el título, contenido, y metadatos
+4. El usuario puede revisar, editar, y publicar
+
+El sistema está optimizado para SEO y genera contenido de alta calidad siguiendo las mejores prácticas de blogging profesional.
+
+---
+
+## ANEXO TÉCNICO (EXTRACCIÓN REAL PARA IMPLEMENTAR PREVIEW EN VIVO)
+
+### 1) Estado de la carpeta `gpt3-conten`
+
+La carpeta contiene principalmente referencias `.txt`/`.anotado.txt`, no el árbol completo de código fuente del plugin original (PHP/JS/CSS organizado por módulos).  
+Por eso no se puede copiar 1:1 el módulo de preview real desde aquí; hay que reconstruirlo con el patrón descrito.
+
+Archivos revisados:
+- `AI_REFERENCE_ARTICLE_PREVIEW.txt`
+- `README.anotado.txt`
+- `AI_REFERENCE_SNIPPETS.anotado.txt`
+- `AI_REFERENCE_EXISTING_IMAGES_JS.anotado.txt`
+
+### 2) Patrón funcional esperado (UI)
+
+El preview "tipo gpt3-conten" se comporta así:
+- Card principal `ARTICLE PREVIEW` con contador de palabras en cabecera.
+- Render incremental del contenido (no esperar al final para pintar).
+- Estado de imagen destacada con placeholder mientras genera.
+- Card separada `SEO & METADATA` (excerpt, tags, focus, meta description).
+- Acción final para publicar/borrador/programar desde el mismo preview.
+
+### 3) Contrato SSE recomendado
+
+Eventos mínimos:
+- `preview_start`
+- `text_progress`
+- `word_count`
+- `featured_image_status`
+- `seo_payload`
+- `preview_done`
+- `preview_error`
+
+Payload ejemplo:
+
+```json
+{
+  "event": "text_progress",
+  "html": "<h2>...</h2><p>...</p>",
+  "word_count": 214
+}
+```
+
+```json
+{
+  "event": "featured_image_status",
+  "status": "pending|done|error",
+  "url": "https://...",
+  "message": "Generando imagen destacada..."
+}
+```
+
+```json
+{
+  "event": "seo_payload",
+  "excerpt": "...",
+  "tags": ["...","..."],
+  "focus_keyphrase": "...",
+  "meta_description": "..."
+}
+```
+
+### 4) Implementación base (PHP) para SSE en WordPress
+
+```php
+function cbia_sse_emit($event, array $payload) {
+    echo 'event: ' . preg_replace('/[^a-zA-Z0-9_\\-]/', '', (string)$event) . "\n";
+    echo 'data: ' . wp_json_encode($payload) . "\n\n";
+    while (ob_get_level() > 0) { @ob_end_flush(); }
+    @flush();
+}
+```
+
+```php
+add_action('wp_ajax_cbia_preview_article_stream', function () {
+    nocache_headers();
+    header('Content-Type: text/event-stream; charset=utf-8');
+    header('Cache-Control: no-cache, no-transform');
+    header('X-Accel-Buffering: no');
+
+    cbia_sse_emit('preview_start', ['message' => 'Iniciando preview...']);
+    // ... emitir text_progress / word_count / featured_image_status / seo_payload
+    cbia_sse_emit('preview_done', ['ok' => 1]);
+    exit;
+});
+```
+
+### 5) Implementación base (JS) cliente
+
+```js
+const es = new EventSource(ajaxurl + '?' + params.toString());
+
+es.addEventListener('text_progress', (evt) => {
+  const data = JSON.parse(evt.data || '{}');
+  previewHtml.innerHTML = data.html || '';
+});
+
+es.addEventListener('word_count', (evt) => {
+  const data = JSON.parse(evt.data || '{}');
+  wordCountEl.textContent = `${Number(data.count || 0)} words`;
+});
+
+es.addEventListener('featured_image_status', (evt) => {
+  const data = JSON.parse(evt.data || '{}');
+  if (data.status === 'done' && data.url) {
+    featuredWrap.innerHTML = `<img src="${data.url}" alt="">`;
+  }
+});
+```
+
+### 6) Problema típico: "no se ve en tiempo real"
+
+Si el proveedor de texto devuelve respuesta completa (no streaming token a token), el backend sólo puede emitir progreso real por fases, no por token.  
+Solución práctica:
+- Emitir `text_progress` por bloques de HTML (párrafos/headers/listas) con pequeños `flush`.
+- Si el modelo no streamea texto, simular escritura progresiva en cliente con una cola visual.
+
+### 7) UX recomendada para evitar fricción
+
+- No usar modal para este caso; usar card inline colapsada bajo “Acciones”.
+- Card cerrada por defecto al cargar.
+- Botón `Generación con previsualización` abre/cierra la card.
+- Edición sobre preview visual (icono lápiz), no textarea HTML crudo por defecto.
+
+### 8) Checklist de paridad visual
+
+- Header `ARTICLE PREVIEW` + contador `N words`.
+- Placeholder de featured image visible durante generación.
+- Contenido aparece progresivamente.
+- Card `SEO & METADATA` separada.
+- Publicar/borrador/programar desde preview.
+- Card cerrada al inicio y sin forzar apertura persistente no deseada.

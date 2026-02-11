@@ -1,0 +1,514 @@
+﻿================================================================================
+FUNCION: get_default_title_prompt
+Resumen: Función que maneja $human.
+CODIGO:
+function get_default_title_prompt(): string
+    {
+        return __('You are an expert SEO copywriter. Write a powerful and engaging SEO title that:
+- Starts with the main focus keyword
+- Stays concise and fits typical search-result length (about 8-12 words)
+- Includes at least one power word (e.g., Stunning, Must-Have, Exclusive)
+- Includes a positive or negative sentiment word (e.g., Best, Effortless, Affordable)
+
+Return ONLY the title text on a single line with no extra text or annotations.
+
+Topic: "{topic}"
+Keywords: "{keywords}"', 'gpt3-ai-content-generator');
+    }
+
+================================================================================
+FUNCION: get_default_content_prompt
+Resumen: Función que maneja $human.
+CODIGO:
+function get_default_content_prompt(): string
+    {
+        return __('Write a full article based on the topic and keywords below. The article must:
+- Be at least 600 words long
+- Include the focus keyword in one or more subheadings (H2, H3, etc.)
+- Start the first paragraph with the focus keyword
+- Be informative, structured, and engaging
+- Use natural tone and clear formatting
+- Avoid repeating the title in the content
+
+Topic: "{topic}"
+Keywords: "{keywords}"', 'gpt3-ai-content-generator');
+    }
+
+================================================================================
+FUNCION: get_default_meta_prompt
+Resumen: Función que maneja $human.
+CODIGO:
+function get_default_meta_prompt(): string
+    {
+        return __('Write a meta description (under 155 characters) for a page about the following topic. The description must:
+- Begin with or include the focus keyword early
+- Use active voice and a clear call-to-action
+- Be concise and engaging
+
+Return ONLY the plain meta description without any quotation marks, labels, or formatting.
+
+Topic: "{topic}"
+Keywords: "{keywords}"
+Summary: "{content_summary}"', 'gpt3-ai-content-generator');
+    }
+
+================================================================================
+FUNCION: get_default_keyword_prompt
+Resumen: Función que maneja $human.
+CODIGO:
+function get_default_keyword_prompt(): string
+    {
+        return __('Identify the single most important and relevant SEO focus keyphrase for the article based on the title and summary. The keyphrase must:
+- Be 2â€“4 words
+- Be naturally found in the content
+- Be suitable for SEO targeting
+
+Return ONLY the keyphrase, with no labels, formatting, or quotation marks.
+
+Title: "{topic}"
+Summary:
+{content_summary}', 'gpt3-ai-content-generator');
+    }
+
+================================================================================
+FUNCION: get_default_excerpt_prompt
+Resumen: Función que maneja $human.
+CODIGO:
+function get_default_excerpt_prompt(): string
+    {
+        return __('Write a short excerpt (1â€“2 engaging sentences) for the following article. Use a friendly, clear tone. Include the focus keyword naturally.
+
+Return ONLY the excerpt, without any formatting or explanation.
+
+Title: "{topic}"
+Keywords: "{keywords}"
+Summary: "{content_summary}"', 'gpt3-ai-content-generator');
+    }
+
+================================================================================
+FUNCION: get_default_tags_prompt
+Resumen: Función que maneja $human.
+CODIGO:
+function get_default_tags_prompt(): string
+    {
+        return __('Generate 5â€“10 relevant SEO tags for a blog post about the following topic. Tags must reflect key themes and keywords.
+
+Return ONLY a comma-separated list of tags. Do not include any explanation, numbering, or formatting.
+
+Title: "{topic}"
+Keywords: "{keywords}"
+Summary:
+{content_summary}', 'gpt3-ai-content-generator');
+    }
+
+================================================================================
+FUNCION: get_default_image_prompt
+Resumen: Función que maneja $human.
+CODIGO:
+function get_default_image_prompt(): string
+    {
+        return __('Generate a high-quality, relevant image prompt for an article about: {topic}', 'gpt3-ai-content-generator');
+    }
+
+================================================================================
+FUNCION: get_default_featured_image_prompt
+Resumen: Función que maneja $human.
+CODIGO:
+function get_default_featured_image_prompt(): string
+    {
+        return __('Generate an eye-catching, high-quality featured image prompt for a blog post about: {topic}. Keywords: {keywords}.', 'gpt3-ai-content-generator');
+    }
+
+================================================================================
+FUNCION: get_default_image_title_prompt
+Resumen: Función que maneja $human.
+CODIGO:
+function get_default_image_title_prompt(): string
+    {
+        return __('Write a concise image title (under 8 words) based on the information below. Keep it clear and descriptive.
+
+Return ONLY the title text without quotation marks or extra text.
+
+Topic: "{topic}"
+Keywords: "{keywords}"
+Post title: "{post_title}"
+Excerpt: "{excerpt}"
+File name: "{file_name}"', 'gpt3-ai-content-generator');
+    }
+
+================================================================================
+FUNCION: get_default_image_alt_text_prompt
+Resumen: Función que maneja $human.
+CODIGO:
+function get_default_image_alt_text_prompt(): string
+    {
+        return __('Write clear alt text (under 125 characters) that describes the image for accessibility.
+
+Return ONLY the alt text with no extra text.
+
+Topic: "{topic}"
+Keywords: "{keywords}"
+Post title: "{post_title}"
+Excerpt: "{excerpt}"
+File name: "{file_name}"', 'gpt3-ai-content-generator');
+    }
+
+================================================================================
+FUNCION: get_default_image_caption_prompt
+Resumen: Función que maneja $human.
+CODIGO:
+function get_default_image_caption_prompt(): string
+    {
+        return __('Write a short, friendly caption (1 sentence) for the image.
+
+Return ONLY the caption text with no extra text.
+
+Topic: "{topic}"
+Keywords: "{keywords}"
+Post title: "{post_title}"
+Excerpt: "{excerpt}"
+File name: "{file_name}"', 'gpt3-ai-content-generator');
+    }
+
+================================================================================
+FUNCION: get_default_image_description_prompt
+Resumen: Función que maneja $human.
+CODIGO:
+function get_default_image_description_prompt(): string
+    {
+        return __('Write a brief image description (1â€“2 sentences) suitable for the media library.
+
+Return ONLY the description with no extra text.
+
+Topic: "{topic}"
+Keywords: "{keywords}"
+Post title: "{post_title}"
+Excerpt: "{excerpt}"
+File name: "{file_name}"', 'gpt3-ai-content-generator');
+    }
+
+================================================================================
+FUNCION: get_default_image_title_prompt_update
+Resumen: Función que maneja $human.
+CODIGO:
+function get_default_image_title_prompt_update(): string
+    {
+        return __('Write a concise image title (under 8 words) based on the attachment details below. Keep it literal and clear.
+
+Return ONLY the title text without quotation marks or extra text.
+
+Attachment title: "{original_title}"
+Caption: "{original_caption}"
+Description: "{original_description}"
+Alt text: "{original_alt}"
+File name: "{file_name}"', 'gpt3-ai-content-generator');
+    }
+
+================================================================================
+FUNCION: get_default_image_alt_text_prompt_update
+Resumen: Función que maneja $human.
+CODIGO:
+function get_default_image_alt_text_prompt_update(): string
+    {
+        return __('Write clear alt text (under 125 characters) that describes the image for accessibility. Include a keyword only if it fits naturally.
+
+Return ONLY the alt text.
+
+Attachment title: "{original_title}"
+Caption: "{original_caption}"
+Description: "{original_description}"
+Alt text: "{original_alt}"
+File name: "{file_name}"', 'gpt3-ai-content-generator');
+    }
+
+================================================================================
+FUNCION: get_default_image_caption_prompt_update
+Resumen: Función que maneja $human.
+CODIGO:
+    public static function get_default_image_caption_prompt_update(): string
+
+================================================================================
+FUNCION: build
+Resumen: Función que maneja $human.
+CODIGO:
+function build(array $settings): string
+    {
+        // Always use the custom content prompt. The caller will handle replacing placeholders.
+        return trim($settings['custom_content_prompt'] ?? '');
+    }
+
+================================================================================
+FUNCION: ensure_default_forms_exist
+Resumen: Función que maneja $human.
+CODIGO:
+function ensure_default_forms_exist()
+    {
+        if (!class_exists(AIPKit_AI_Form_Storage::class) || !class_exists(AIPKit_AI_Form_Admin_Setup::class)) {
+            return;
+        }
+
+        $default_forms = self::get_default_forms_data();
+        $form_storage = new AIPKit_AI_Form_Storage();
+
+        foreach ($default_forms as $form_key => $form_data) {
+            $option_name = 'aipkit_default_form_created_' . $form_key;
+            if (get_option($option_name)) {
+                continue; // Already created.
+            }
+
+            // To avoid duplicates, also check by title.
+            // FIX: Replaced deprecated get_page_by_title with WP_Query.
+            $query = new \WP_Query([
+                'post_type'      => AIPKit_AI_Form_Admin_Setup::POST_TYPE,
+                'title'          => $form_data['title'],
+                'post_status'    => 'publish',
+                'posts_per_page' => 1,
+                'no_found_rows'  => true,
+            ]);
+
+            if ($query->have_posts()) {
+                $existing_post = $query->posts[0];
+                update_option($option_name, $existing_post->ID, 'no');
+                continue;
+            }
+            // --- END FIX ---
+
+            $new_form_id_or_error = $form_storage->create_form($form_data['title'], $form_data['settings']);
+
+            if (!is_wp_error($new_form_id_or_error)) {
+                update_option($option_name, $new_form_id_or_error, 'no');
+                // Also add meta to the post itself for easier identification if needed later
+                update_post_meta($new_form_id_or_error, '_aipkit_is_default_form', '1');
+            }
+        }
+    }
+
+================================================================================
+FUNCION: get_default_forms_data
+Resumen: Función que maneja $human.
+CODIGO:
+function get_default_forms_data(): array
+    {
+        return [
+            'blog_post_generator' => [
+                'title' => 'Blog Post Generator',
+                'settings' => [
+                    'ai_provider' => 'OpenAI',
+                    'ai_model' => 'gpt-4o-mini',
+                    'prompt_template' => "You are an expert SEO content writer and professional blogger. Your task is to write a high-quality, engaging, and SEO-friendly blog post.\n\n**Instructions:**\n1.  **Analyze the Input:** Carefully consider the provided topic, target audience, desired length, and tone.\n2.  **Structure the Article:** The article must have a clear structure:\n    - An engaging introduction that hooks the reader.\n    - A well-organized body with multiple sections, using H2 and H3 headings.\n    - A concise and impactful conclusion that summarizes the key points.\n3.  **Incorporate Keywords:** Naturally weave the provided keywords throughout the article, especially in headings and the introduction.\n4.  **Tone:** Strictly adhere to the specified tone of voice.\n5.  **Length:** Adjust the depth and detail of the content to match the desired length.\n6.  **Output:** Return only the full article content in Markdown format. Do not include any pre-amble, notes, or post-article commentary.\n\n---\n**Blog Post Details:**\n*   **Topic/Title:** {topic}\n*   **Target Audience:** {audience}\n*   **Desired Length:** {length}\n*   **Tone of Voice:** {tone}\n*   **Keywords:** {keywords}\n---\n\nBegin the blog post now:",
+                    'form_structure' => wp_json_encode([
+                        ['internalId' => 'row-1', 'type' => 'layout-row', 'columns' => [
+                            ['internalId' => 'col-1-1', 'width' => '100%', 'elements' => [
+                                ['internalId' => 'el-1', 'type' => 'text-input', 'label' => 'Blog Post Topic / Title', 'placeholder' => 'e.g., The Future of Artificial Intelligence', 'fieldId' => 'topic', 'required' => true, 'helpText' => 'What is the main subject of your article?']
+                            ]]
+                        ]],
+                        ['internalId' => 'row-2', 'type' => 'layout-row', 'columns' => [
+                            ['internalId' => 'col-2-1', 'width' => '100%', 'elements' => [
+                                ['internalId' => 'el-2', 'type' => 'text-input', 'label' => 'Target Audience', 'placeholder' => 'e.g., Tech enthusiasts, beginners, marketing professionals', 'fieldId' => 'audience', 'required' => true, 'helpText' => 'Who are you writing for?']
+                            ]]
+                        ]],
+                        ['internalId' => 'row-3', 'type' => 'layout-row', 'columns' => [
+                            ['internalId' => 'col-3-1', 'width' => '50%', 'elements' => [
+                                ['internalId' => 'el-3', 'type' => 'select', 'label' => 'Desired Length', 'fieldId' => 'length', 'required' => true, 'options' => [
+                                    ['value' => 'short (approx. 500 words)', 'text' => 'Short (~500 words)'],
+                                    ['value' => 'medium (approx. 1000 words)', 'text' => 'Medium (~1000 words)'],
+                                    ['value' => 'long (approx. 1500+ words)', 'text' => 'Long (1500+ words)']
+                                ], 'helpText' => '']
+                            ]],
+                            ['internalId' => 'col-3-2', 'width' => '50%', 'elements' => [
+                                ['internalId' => 'el-4', 'type' => 'select', 'label' => 'Tone of Voice', 'fieldId' => 'tone', 'required' => true, 'options' => [
+                                    ['value' => 'Professional', 'text' => 'Professional'],
+                                    ['value' => 'Casual', 'text' => 'Casual'],
+                                    ['value' => 'Witty', 'text' => 'Witty'],
+                                    ['value' => 'Persuasive', 'text' => 'Persuasive']
+                                ], 'helpText' => '']
+                            ]]
+                        ]],
+                        ['internalId' => 'row-4', 'type' => 'layout-row', 'columns' => [
+                            ['internalId' => 'col-4-1', 'width' => '100%', 'elements' => [
+                                ['internalId' => 'el-5', 'type' => 'text-input', 'label' => 'Keywords (comma-separated)', 'placeholder' => 'e.g., AI, machine learning, neural networks', 'fieldId' => 'keywords', 'required' => false, 'helpText' => '(Optional) Helps with SEO focus.']
+                            ]]
+                        ]],
+                    ])
+                ]
+            ],
+            'youtube_script_writer' => [
+                'title' => 'YouTube Script Writer',
+                'settings' => [
+                    'ai_provider' => 'OpenAI',
+                    'ai_model' => 'gpt-4o-mini',
+                    'prompt_template' => "You are an expert YouTube scriptwriter with a knack for creating highly engaging and shareable video content. Your goal is to write a complete video script based on the details provided.\n\n**Instructions:**\n1.  **Script Structure:** The script should be structured logically with clear sections:\n    - **Hook (0-15 seconds):** A captivating opening to grab the viewer's attention immediately.\n    - **Intro:** Briefly introduce the video's topic and what the viewer will learn or experience.\n    - **Main Content:** Break down the core content into logical segments or talking points. Use bullet points for clarity.\n    - **Call to Action (CTA):** Integrate the provided Call to Action seamlessly. If none is provided, suggest a relevant one (e.g., \"like, comment, and subscribe\").\n    - **Outro:** A concluding segment that wraps up the video and gives a final thought.\n2.  **Timestamps:** Provide approximate timestamps (e.g., [00:30]) for each major section to guide the creator, based on the target duration.\n3.  **Visual Cues:** Include suggestions for on-screen text, B-roll, or graphics in brackets, like [Show on-screen: Key takeaway point].\n4.  **Tone & Style:** The script must match the specified video style.\n\n---\n**Video Details:**\n*   **Title/Topic:** {video_topic}\n*   **Target Duration:** {duration} minutes\n*   **Style:** {style}\n*   **Call to Action:** {cta}\n---\n\nWrite the complete YouTube script now:",
+                    'form_structure' => wp_json_encode([
+                        ['internalId' => 'row-5', 'type' => 'layout-row', 'columns' => [
+                            ['internalId' => 'col-5-1', 'width' => '100%', 'elements' => [
+                                ['internalId' => 'el-6', 'type' => 'text-input', 'label' => 'Video Title or Topic', 'placeholder' => 'e.g., How to Make the Perfect Sourdough Bread', 'fieldId' => 'video_topic', 'required' => true, 'helpText' => '']
+                            ]]
+                        ]],
+                        ['internalId' => 'row-6', 'type' => 'layout-row', 'columns' => [
+                            ['internalId' => 'col-6-1', 'width' => '50%', 'elements' => [
+                                ['internalId' => 'el-7', 'type' => 'text-input', 'label' => 'Target Duration (in minutes)', 'placeholder' => 'e.g., 10', 'fieldId' => 'duration', 'required' => true, 'helpText' => 'Enter a number.']
+                            ]],
+                             ['internalId' => 'col-6-2', 'width' => '50%', 'elements' => [
+                                ['internalId' => 'el-8', 'type' => 'select', 'label' => 'Video Style', 'fieldId' => 'style', 'required' => true, 'options' => [
+                                    ['value' => 'Tutorial / How-to', 'text' => 'Tutorial / How-to'],
+                                    ['value' => 'Vlog', 'text' => 'Vlog'],
+                                    ['value' => 'Product Review', 'text' => 'Product Review'],
+                                    ['value' => 'Storytelling / Narrative', 'text' => 'Storytelling / Narrative']
+                                ], 'helpText' => '']
+                            ]]
+                        ]],
+                         ['internalId' => 'row-7', 'type' => 'layout-row', 'columns' => [
+                            ['internalId' => 'col-7-1', 'width' => '100%', 'elements' => [
+                                ['internalId' => 'el-9', 'type' => 'textarea', 'label' => "Call to Action (Optional)", 'placeholder' => "e.g., Subscribe for more tips!", 'fieldId' => 'cta', 'required' => false, 'helpText' => 'What should viewers do at the end?']
+                            ]]
+                        ]],
+                    ])
+                ]
+            ],
+            'customer_support_reply_builder' => [
+                'title' => 'Customer Support Reply Builder',
+                'settings' => [
+                    'ai_provider' => 'OpenAI',
+                    'ai_model' => 'gpt-4o-mini',
+                    'prompt_template' => "You are a highly skilled and empathetic customer support professional. Your task is to draft a helpful and well-written reply to the customer's message below.\n\n**Instructions:**\n1.  **Acknowledge:** Start by acknowledging the customer's issue or question.\n2.  **Address the Core Problem:** Directly address the main points from the customer's message.\n3.  **Maintain Tone:** Adhere strictly to the specified response tone.\n4.  **Incorporate Details:** Use the provided Product/Service Name and any additional notes to make the reply specific and helpful.\n5.  **Clarity and Conciseness:** Write a clear, concise, and easy-to-understand response.\n6.  **Format:** Output the reply only. Do not include any surrounding text, greetings to me, or explanations of what you did.\n\n---\n**Support Ticket Details:**\n*   **Customer's Message:**\n{customer_message}\n\n*   **Product/Service Mentioned:** {product_name}\n*   **Desired Response Tone:** {tone}\n*   **Internal Notes for your reply:** {notes}\n---\n\nDraft the customer support reply now:",
+                    'form_structure' => wp_json_encode([
+                        ['internalId' => 'row-8', 'type' => 'layout-row', 'columns' => [
+                            ['internalId' => 'col-8-1', 'width' => '100%', 'elements' => [
+                                ['internalId' => 'el-10', 'type' => 'textarea', 'label' => "Customer's Message", 'placeholder' => "Paste the customer's full email or message here.", 'fieldId' => 'customer_message', 'required' => true, 'helpText' => '']
+                            ]]
+                        ]],
+                        ['internalId' => 'row-9', 'type' => 'layout-row', 'columns' => [
+                            ['internalId' => 'col-9-1', 'width' => '50%', 'elements' => [
+                                ['internalId' => 'el-11', 'type' => 'text-input', 'label' => 'Product/Service Name (Optional)', 'placeholder' => 'e.g., Pro Plan, Widget X', 'fieldId' => 'product_name', 'required' => false, 'helpText' => '']
+                            ]],
+                             ['internalId' => 'col-9-2', 'width' => '50%', 'elements' => [
+                                ['internalId' => 'el-12', 'type' => 'select', 'label' => 'Response Tone', 'fieldId' => 'tone', 'required' => true, 'options' => [
+                                    ['value' => 'Polite & Empathetic', 'text' => 'Polite & Empathetic'],
+                                    ['value' => 'Friendly & Casual', 'text' => 'Friendly & Casual'],
+                                    ['value' => 'Formal & Direct', 'text' => 'Formal & Direct'],
+                                    ['value' => 'Neutral', 'text' => 'Neutral']
+                                ], 'helpText' => '']
+                            ]]
+                        ]],
+                         ['internalId' => 'row-10', 'type' => 'layout-row', 'columns' => [
+                            ['internalId' => 'col-10-1', 'width' => '100%', 'elements' => [
+                                ['internalId' => 'el-13', 'type' => 'textarea', 'label' => 'Additional Notes for AI (Optional)', 'placeholder' => 'e.g., Offer a 10% discount, Escalate to tier 2 support if not resolved.', 'fieldId' => 'notes', 'required' => false, 'helpText' => 'Internal context for the AI to use in the reply.']
+                            ]]
+                        ]],
+                    ])
+                ]
+            ],
+        ];
+    }
+
+================================================================================
+FUNCION: build_prompt_logic
+Resumen (del comentario): Builds the final prompt string from the template and submitted data. @param array $form_config The configuration of the form. @param array $submitted_fields The sanitized submitted data. @return string|WP_Error The final prompt string or WP_Error if template is missing.
+CODIGO:
+function build_prompt_logic(array $form_config, array $submitted_fields): string|WP_Error
+{
+    $prompt_template = $form_config['prompt_template'] ?? '';
+    $form_structure = $form_config['structure'] ?? [];
+
+    if (empty($prompt_template)) {
+        return new WP_Error('missing_template', __('Form prompt template is not configured.', 'gpt3-ai-content-generator'), ['status' => 500]);
+    }
+
+    $final_prompt = $prompt_template;
+
+    if (!empty($form_structure) && is_array($form_structure)) {
+        foreach ($form_structure as $row) {
+            if (empty($row['columns']) || !is_array($row['columns'])) {
+                continue;
+            }
+            foreach ($row['columns'] as $column) {
+                if (empty($column['elements']) || !is_array($column['elements'])) {
+                    continue;
+                }
+                foreach ($column['elements'] as $element) {
+                    $field_id = $element['fieldId'] ?? null;
+                    if (!$field_id) { // Skip if element has no fieldId
+                        continue;
+                    }
+
+                    $placeholder = '{' . $field_id . '}';
+                    $value_to_substitute = ''; // Default to empty string if field not submitted
+
+                    if (isset($submitted_fields[$field_id])) {
+                        $submitted_value = $submitted_fields[$field_id];
+                        $element_type = $element['type'] ?? 'text-input';
+
+                        switch ($element_type) {
+                            case 'select':
+                            case 'radio-button':
+                                $options = $element['options'] ?? [];
+                                $found_option_text = false;
+                                foreach ($options as $option) {
+                                    if (isset($option['value']) && $option['value'] == $submitted_value) { // Use == for loose comparison
+                                        $value_to_substitute = $option['text'] ?? $submitted_value;
+                                        $found_option_text = true;
+                                        break;
+                                    }
+                                }
+                                if (!$found_option_text) {
+                                    $value_to_substitute = $submitted_value; // Fallback to raw value if no matching option text found
+                                }
+                                break;
+
+                            case 'checkbox':
+                                // Handle both array and single/comma-separated string value for robustness.
+                                $submitted_values_array = [];
+                                if (is_array($submitted_value)) {
+                                    $submitted_values_array = $submitted_value;
+                                } elseif (is_string($submitted_value) && !empty($submitted_value)) {
+                                    // This handles both a single value string and a comma-separated string
+                                    $submitted_values_array = array_map('trim', explode(',', $submitted_value));
+                                }
+
+                                if (!empty($submitted_values_array)) {
+                                    $labels_to_substitute = [];
+                                    $options = $element['options'] ?? [];
+                                    // Loop through submitted values and find their corresponding display text.
+                                    foreach ($submitted_values_array as $val) {
+                                        $found_text = false;
+                                        foreach ($options as $option) {
+                                            if (isset($option['value']) && $option['value'] == $val) { // Use == for loose comparison
+                                                $labels_to_substitute[] = $option['text'] ?? $val;
+                                                $found_text = true;
+                                                break;
+                                            }
+                                        }
+                                        if (!$found_text) {
+                                            $labels_to_substitute[] = $val; // Fallback to the raw value
+                                        }
+                                    }
+                                    $value_to_substitute = implode(', ', $labels_to_substitute);
+                                } else {
+                                    // If nothing is selected, substitute with an empty string.
+                                    $value_to_substitute = '';
+                                }
+                                break;
+
+                            default: // 'text-input', 'textarea', 'file-upload' etc.
+                                $value_to_substitute = $submitted_value;
+                                break;
+                        }
+                    }
+
+                    // Replace placeholder in the prompt with the determined value.
+                    // This will also replace with '' if the field wasn't submitted, effectively removing the placeholder.
+                    $final_prompt = str_replace($placeholder, $value_to_substitute, $final_prompt);
+                }
+            }
+        }
+    }
+
+    // Handle the legacy/simple case where a single 'user_input' is expected
+    // This is less likely with the new structure but good for backward compatibility
+    if (empty($form_structure) && isset($submitted_fields['user_input'])) {
+        $final_prompt = str_replace('{user_input}', $submitted_fields['user_input'], $final_prompt);
+    }
+
+    return $final_prompt;
+}
+

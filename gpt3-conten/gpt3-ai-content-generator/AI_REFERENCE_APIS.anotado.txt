@@ -1,0 +1,1035 @@
+﻿================================================================================
+FUNCION: get_strategy
+Resumen: Función que maneja $human.
+CODIGO:
+function get_strategy(string $provider): ProviderStrategyInterface|WP_Error {
+        if (isset(self::$instances[$provider])) {
+            return self::$instances[$provider];
+        }
+
+        $strategy_path_base = __DIR__ . '/'; // This will be classes/core/providers/
+        $strategies_to_load = [
+            'OpenAI'     => 'openai/bootstrap-provider-strategy.php',
+            'OpenRouter' => 'openrouter/bootstrap-provider-strategy.php',
+            'Google'     => 'google/bootstrap-provider-strategy.php', // MODIFIED PATH
+            'Azure'      => 'azure/bootstrap-provider-strategy.php',
+            'DeepSeek'   => 'deepseek-provider-strategy.php',
+            'Ollama'     => 'ollama/bootstrap-provider-strategy.php',
+        ];
+
+        // Ensure the Interface and Base Class are loaded before any specific strategy.
+        // This is also handled by ProviderDependenciesLoader, but as a safeguard:
+        if (!interface_exists(ProviderStrategyInterface::class)) {
+            $interface_path = $strategy_path_base . 'interface-provider-strategy.php';
+            if (file_exists($interface_path)) require_once $interface_path;
+            else return new WP_Error('strategy_interface_missing', 'ProviderStrategyInterface is missing.');
+        }
+        if (!class_exists(BaseProviderStrategy::class)) {
+            $base_class_path = $strategy_path_base . 'base-provider-strategy.php';
+            if (file_exists($base_class_path)) require_once $base_class_path;
+            else return new WP_Error('base_strategy_class_missing', 'BaseProviderStrategy class is missing.');
+        }
+
+
+        if (isset($strategies_to_load[$provider])) {
+             $strategy_file = $strategy_path_base . $strategies_to_load[$provider];
+             if (file_exists($strategy_file)) {
+                 require_once $strategy_file;
+             } else {
+                 /* translators: %s: The name of the AI provider (e.g., 'OpenAI'). */
+                 return new WP_Error('strategy_file_not_found', sprintf(__('Strategy file not found for provider: %s', 'gpt3-ai-content-generator'), esc_html($provider)));
+             }
+        } else {
+             /* translators: %s: The name of the AI provider. */
+             return new WP_Error('unsupported_provider_strategy', sprintf(__('Provider strategy for "%s" is not defined in loader map.', 'gpt3-ai-content-generator'), esc_html($provider)));
+        }
+
+        switch ($provider) {
+            case 'OpenAI':
+                if (class_exists(OpenAIProviderStrategy::class)) {
+                    self::$instances[$provider] = new OpenAIProviderStrategy();
+                }
+                break;
+            case 'OpenRouter':
+                 if (class_exists(OpenRouterProviderStrategy::class)) {
+                    self::$instances[$provider] = new OpenRouterProviderStrategy();
+                 }
+                break;
+            case 'Google':
+                 if (class_exists(GoogleProviderStrategy::class)) {
+                    self::$instances[$provider] = new GoogleProviderStrategy();
+                 }
+                break;
+            case 'Azure':
+                 if (class_exists(AzureProviderStrategy::class)) { 
+                    self::$instances[$provider] = new AzureProviderStrategy();
+                 }
+                 break;
+             case 'DeepSeek':
+                 if (class_exists(DeepSeekProviderStrategy::class)) {
+                     self::$instances[$provider] = new DeepSeekProviderStrategy();
+                 }
+                 break;
+            case 'Ollama':
+                if (class_exists(AIPKit_Ollama_Strategy::class)) {
+                    self::$instances[$provider] = new AIPKit_Ollama_Strategy();
+                }
+                break;
+            default:
+                /* translators: %s: The name of the AI provider. */
+                return new WP_Error('unsupported_provider_strategy', sprintf(__('Provider strategy "%s" is not supported.', 'gpt3-ai-content-generator'), esc_html($provider)));
+        }
+
+        if (!isset(self::$instances[$provider])) {
+            /* translators: %s: The name of the AI provider. */
+            return new WP_Error('strategy_instantiation_failed', sprintf(__('Failed to load strategy for provider: %s', 'gpt3-ai-content-generator'), esc_html($provider)));
+        }
+
+        return self::$instances[$provider];
+    }
+
+================================================================================
+FUNCION: build_api_url
+Resumen: Función que maneja $human.
+CODIGO:
+function build_api_url(string $operation, array $params): string|WP_Error;
+
+    /**
+     * Get necessary HTTP headers for API requests.
+     *
+     * @param string $api_key The API key for the provider.
+     * @param string $operation The specific operation being performed.
+     * @return array Key-value array of headers.
+     */
+    public function get_api_headers(string $api_key, string $operation): array;
+
+    /**
+     * Format the payload (messages, instructions) for a standard chat request.
+     *
+     * @param string $user_message The user's message.
+     * @param string $instructions System instructions.
+     * @param array  $history Conversation history.
+     * @param array  $ai_params AI parameters (temperature, max_tokens, etc.).
+     * @param string $model The target model/deployment ID.
+     * @return array The formatted request body data.
+     */
+    public function format_chat_payload(string $user_message, string $instructions, array $history, array $ai_params, string $model): array;
+
+    /**
+     * Parse the response from a standard chat request.
+     *
+     * @param array $decoded_response The decoded JSON response body.
+     * @param array $request_data The original request data sent.
+     * @return array|WP_Error ['content' => string, 'usage' => array|null] or WP_Error.
+     */
+    public function parse_chat_response(array $decoded_response, array $request_data): array|WP_Error;
+
+    /**
+     * Parse an error response from the provider.
+     *
+     * @param mixed $response_body The raw or decoded error response body.
+     * @param int $status_code The HTTP status code.
+     * @return string A user-friendly error message.
+     */
+    public function parse_error_response($response_body, int $status_code): string;
+
+    /**
+     * Fetch the list of available models/deployments.
+     *
+     * @param array $api_params Connection parameters (api_key, base_url, etc.).
+     * @return array|WP_Error Formatted list [['id' => ..., 'name' => ...]] or WP_Error.
+     */
+    public function get_models(array $api_params): array|WP_Error;
+
+    /**
+     * Build the payload for an SSE (streaming) chat request.
+     *
+     * @param array $messages Formatted messages/input/contents array.
+     * @param string|array|null $system_instruction Formatted system instruction.
+     * @param array $ai_params AI parameters.
+     * @param string $model Target model/deployment.
+     * @return array The formatted request body data for SSE.
+     */
+    public function build_sse_payload(array $messages, $system_instruction, array $ai_params, string $model): array;
+
+    /**
+     * Parse a chunk of data received from an SSE stream.
+     *
+     * @param string $sse_chunk The raw chunk received from the stream.
+     * @param string &$current_buffer The reference to the incomplete buffer for this provider.
+     * @return array {
+     *     'delta'      => string|null, // Text delta
+     *     'usage'      => array|null,  // Token usage data
+     *     'is_error'   => bool,        // Fatal error flag
+     *     'is_warning' => bool,        // Non-fatal warning/block flag
+     *     'is_done'    => bool         // End signal flag
+     * }
+
+================================================================================
+FUNCION: get_api_headers
+Resumen: Función que maneja $human.
+CODIGO:
+function get_api_headers(string $api_key, string $operation): array;
+
+    /**
+     * Format the payload (messages, instructions) for a standard chat request.
+     *
+     * @param string $user_message The user's message.
+     * @param string $instructions System instructions.
+     * @param array  $history Conversation history.
+     * @param array  $ai_params AI parameters (temperature, max_tokens, etc.).
+     * @param string $model The target model/deployment ID.
+     * @return array The formatted request body data.
+     */
+    public function format_chat_payload(string $user_message, string $instructions, array $history, array $ai_params, string $model): array;
+
+    /**
+     * Parse the response from a standard chat request.
+     *
+     * @param array $decoded_response The decoded JSON response body.
+     * @param array $request_data The original request data sent.
+     * @return array|WP_Error ['content' => string, 'usage' => array|null] or WP_Error.
+     */
+    public function parse_chat_response(array $decoded_response, array $request_data): array|WP_Error;
+
+    /**
+     * Parse an error response from the provider.
+     *
+     * @param mixed $response_body The raw or decoded error response body.
+     * @param int $status_code The HTTP status code.
+     * @return string A user-friendly error message.
+     */
+    public function parse_error_response($response_body, int $status_code): string;
+
+    /**
+     * Fetch the list of available models/deployments.
+     *
+     * @param array $api_params Connection parameters (api_key, base_url, etc.).
+     * @return array|WP_Error Formatted list [['id' => ..., 'name' => ...]] or WP_Error.
+     */
+    public function get_models(array $api_params): array|WP_Error;
+
+    /**
+     * Build the payload for an SSE (streaming) chat request.
+     *
+     * @param array $messages Formatted messages/input/contents array.
+     * @param string|array|null $system_instruction Formatted system instruction.
+     * @param array $ai_params AI parameters.
+     * @param string $model Target model/deployment.
+     * @return array The formatted request body data for SSE.
+     */
+    public function build_sse_payload(array $messages, $system_instruction, array $ai_params, string $model): array;
+
+    /**
+     * Parse a chunk of data received from an SSE stream.
+     *
+     * @param string $sse_chunk The raw chunk received from the stream.
+     * @param string &$current_buffer The reference to the incomplete buffer for this provider.
+     * @return array {
+     *     'delta'      => string|null, // Text delta
+     *     'usage'      => array|null,  // Token usage data
+     *     'is_error'   => bool,        // Fatal error flag
+     *     'is_warning' => bool,        // Non-fatal warning/block flag
+     *     'is_done'    => bool         // End signal flag
+     * }
+
+================================================================================
+FUNCION: format_chat_payload
+Resumen: Función que maneja $human.
+CODIGO:
+function format_chat_payload(string $user_message, string $instructions, array $history, array $ai_params, string $model): array;
+
+    /**
+     * Parse the response from a standard chat request.
+     *
+     * @param array $decoded_response The decoded JSON response body.
+     * @param array $request_data The original request data sent.
+     * @return array|WP_Error ['content' => string, 'usage' => array|null] or WP_Error.
+     */
+    public function parse_chat_response(array $decoded_response, array $request_data): array|WP_Error;
+
+    /**
+     * Parse an error response from the provider.
+     *
+     * @param mixed $response_body The raw or decoded error response body.
+     * @param int $status_code The HTTP status code.
+     * @return string A user-friendly error message.
+     */
+    public function parse_error_response($response_body, int $status_code): string;
+
+    /**
+     * Fetch the list of available models/deployments.
+     *
+     * @param array $api_params Connection parameters (api_key, base_url, etc.).
+     * @return array|WP_Error Formatted list [['id' => ..., 'name' => ...]] or WP_Error.
+     */
+    public function get_models(array $api_params): array|WP_Error;
+
+    /**
+     * Build the payload for an SSE (streaming) chat request.
+     *
+     * @param array $messages Formatted messages/input/contents array.
+     * @param string|array|null $system_instruction Formatted system instruction.
+     * @param array $ai_params AI parameters.
+     * @param string $model Target model/deployment.
+     * @return array The formatted request body data for SSE.
+     */
+    public function build_sse_payload(array $messages, $system_instruction, array $ai_params, string $model): array;
+
+    /**
+     * Parse a chunk of data received from an SSE stream.
+     *
+     * @param string $sse_chunk The raw chunk received from the stream.
+     * @param string &$current_buffer The reference to the incomplete buffer for this provider.
+     * @return array {
+     *     'delta'      => string|null, // Text delta
+     *     'usage'      => array|null,  // Token usage data
+     *     'is_error'   => bool,        // Fatal error flag
+     *     'is_warning' => bool,        // Non-fatal warning/block flag
+     *     'is_done'    => bool         // End signal flag
+     * }
+
+================================================================================
+FUNCION: parse_chat_response
+Resumen: Función que maneja $human.
+CODIGO:
+function parse_chat_response(array $decoded_response, array $request_data): array|WP_Error;
+
+    /**
+     * Parse an error response from the provider.
+     *
+     * @param mixed $response_body The raw or decoded error response body.
+     * @param int $status_code The HTTP status code.
+     * @return string A user-friendly error message.
+     */
+    public function parse_error_response($response_body, int $status_code): string;
+
+    /**
+     * Fetch the list of available models/deployments.
+     *
+     * @param array $api_params Connection parameters (api_key, base_url, etc.).
+     * @return array|WP_Error Formatted list [['id' => ..., 'name' => ...]] or WP_Error.
+     */
+    public function get_models(array $api_params): array|WP_Error;
+
+    /**
+     * Build the payload for an SSE (streaming) chat request.
+     *
+     * @param array $messages Formatted messages/input/contents array.
+     * @param string|array|null $system_instruction Formatted system instruction.
+     * @param array $ai_params AI parameters.
+     * @param string $model Target model/deployment.
+     * @return array The formatted request body data for SSE.
+     */
+    public function build_sse_payload(array $messages, $system_instruction, array $ai_params, string $model): array;
+
+    /**
+     * Parse a chunk of data received from an SSE stream.
+     *
+     * @param string $sse_chunk The raw chunk received from the stream.
+     * @param string &$current_buffer The reference to the incomplete buffer for this provider.
+     * @return array {
+     *     'delta'      => string|null, // Text delta
+     *     'usage'      => array|null,  // Token usage data
+     *     'is_error'   => bool,        // Fatal error flag
+     *     'is_warning' => bool,        // Non-fatal warning/block flag
+     *     'is_done'    => bool         // End signal flag
+     * }
+
+================================================================================
+FUNCION: parse_error_response
+Resumen: Función que maneja $human.
+CODIGO:
+function parse_error_response($response_body, int $status_code): string;
+
+    /**
+     * Fetch the list of available models/deployments.
+     *
+     * @param array $api_params Connection parameters (api_key, base_url, etc.).
+     * @return array|WP_Error Formatted list [['id' => ..., 'name' => ...]] or WP_Error.
+     */
+    public function get_models(array $api_params): array|WP_Error;
+
+    /**
+     * Build the payload for an SSE (streaming) chat request.
+     *
+     * @param array $messages Formatted messages/input/contents array.
+     * @param string|array|null $system_instruction Formatted system instruction.
+     * @param array $ai_params AI parameters.
+     * @param string $model Target model/deployment.
+     * @return array The formatted request body data for SSE.
+     */
+    public function build_sse_payload(array $messages, $system_instruction, array $ai_params, string $model): array;
+
+    /**
+     * Parse a chunk of data received from an SSE stream.
+     *
+     * @param string $sse_chunk The raw chunk received from the stream.
+     * @param string &$current_buffer The reference to the incomplete buffer for this provider.
+     * @return array {
+     *     'delta'      => string|null, // Text delta
+     *     'usage'      => array|null,  // Token usage data
+     *     'is_error'   => bool,        // Fatal error flag
+     *     'is_warning' => bool,        // Non-fatal warning/block flag
+     *     'is_done'    => bool         // End signal flag
+     * }
+
+================================================================================
+FUNCION: get_models
+Resumen: Función que maneja $human.
+CODIGO:
+function get_models(array $api_params): array|WP_Error;
+
+    /**
+     * Build the payload for an SSE (streaming) chat request.
+     *
+     * @param array $messages Formatted messages/input/contents array.
+     * @param string|array|null $system_instruction Formatted system instruction.
+     * @param array $ai_params AI parameters.
+     * @param string $model Target model/deployment.
+     * @return array The formatted request body data for SSE.
+     */
+    public function build_sse_payload(array $messages, $system_instruction, array $ai_params, string $model): array;
+
+    /**
+     * Parse a chunk of data received from an SSE stream.
+     *
+     * @param string $sse_chunk The raw chunk received from the stream.
+     * @param string &$current_buffer The reference to the incomplete buffer for this provider.
+     * @return array {
+     *     'delta'      => string|null, // Text delta
+     *     'usage'      => array|null,  // Token usage data
+     *     'is_error'   => bool,        // Fatal error flag
+     *     'is_warning' => bool,        // Non-fatal warning/block flag
+     *     'is_done'    => bool         // End signal flag
+     * }
+
+================================================================================
+FUNCION: build_sse_payload
+Resumen: Función que maneja $human.
+CODIGO:
+function build_sse_payload(array $messages, $system_instruction, array $ai_params, string $model): array;
+
+    /**
+     * Parse a chunk of data received from an SSE stream.
+     *
+     * @param string $sse_chunk The raw chunk received from the stream.
+     * @param string &$current_buffer The reference to the incomplete buffer for this provider.
+     * @return array {
+     *     'delta'      => string|null, // Text delta
+     *     'usage'      => array|null,  // Token usage data
+     *     'is_error'   => bool,        // Fatal error flag
+     *     'is_warning' => bool,        // Non-fatal warning/block flag
+     *     'is_done'    => bool         // End signal flag
+     * }
+
+================================================================================
+FUNCION: parse_sse_chunk
+Resumen: Función que maneja $human.
+CODIGO:
+function parse_sse_chunk(string $sse_chunk, string &$current_buffer): array;
+
+     /**
+     * Get provider-specific request options for wp_remote_request or cURL.
+     *
+     * @param string $operation The operation ('chat', 'stream', 'models').
+     * @return array Additional options (e.g., method, user-agent, timeout).
+     */
+    public function get_request_options(string $operation): array;
+
+    /**
+     * Format headers array into the ['Header: Value', ...] format needed by cURL.
+     *
+     * @param array $headers Key-value array of headers.
+     * @return array Indexed array of header strings.
+     */
+    public function format_headers_for_curl(array $headers): array;
+
+    /**
+     * Generate embeddings for the given input text(s).
+     *
+     * @param string|array $input The input text or array of texts.
+     * @param array $api_params Provider-specific API connection parameters.
+     * @param array $options Embedding options (model, dimensions, encoding_format, etc.).
+
+---
+A3) Base Provider Strategy (shared helpers)
+File: classes/core/providers/base-provider-strategy.php
+---
+<?php
+
+// File: /Applications/MAMP/htdocs/wordpress/wp-content/plugins/gpt3-ai-content-generator/classes/core/providers/base-provider-strategy.php
+// Status: MODIFIED
+
+namespace WPAICG\Core\Providers; // *** Correct namespace ***
+
+use WP_Error;
+
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
+
+================================================================================
+FUNCION: get_request_options
+Resumen: Función que maneja $human.
+CODIGO:
+function get_request_options(string $operation): array;
+
+    /**
+     * Format headers array into the ['Header: Value', ...] format needed by cURL.
+     *
+     * @param array $headers Key-value array of headers.
+     * @return array Indexed array of header strings.
+     */
+    public function format_headers_for_curl(array $headers): array;
+
+    /**
+     * Generate embeddings for the given input text(s).
+     *
+     * @param string|array $input The input text or array of texts.
+     * @param array $api_params Provider-specific API connection parameters.
+     * @param array $options Embedding options (model, dimensions, encoding_format, etc.).
+
+---
+A3) Base Provider Strategy (shared helpers)
+File: classes/core/providers/base-provider-strategy.php
+---
+<?php
+
+// File: /Applications/MAMP/htdocs/wordpress/wp-content/plugins/gpt3-ai-content-generator/classes/core/providers/base-provider-strategy.php
+// Status: MODIFIED
+
+namespace WPAICG\Core\Providers; // *** Correct namespace ***
+
+use WP_Error;
+
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
+
+================================================================================
+FUNCION: format_headers_for_curl
+Resumen: Función que maneja $human.
+CODIGO:
+function format_headers_for_curl(array $headers): array;
+
+    /**
+     * Generate embeddings for the given input text(s).
+     *
+     * @param string|array $input The input text or array of texts.
+     * @param array $api_params Provider-specific API connection parameters.
+     * @param array $options Embedding options (model, dimensions, encoding_format, etc.).
+
+---
+A3) Base Provider Strategy (shared helpers)
+File: classes/core/providers/base-provider-strategy.php
+---
+<?php
+
+// File: /Applications/MAMP/htdocs/wordpress/wp-content/plugins/gpt3-ai-content-generator/classes/core/providers/base-provider-strategy.php
+// Status: MODIFIED
+
+namespace WPAICG\Core\Providers; // *** Correct namespace ***
+
+use WP_Error;
+
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
+
+================================================================================
+FUNCION: decode_json
+Resumen: Función que maneja $human.
+CODIGO:
+function decode_json(string $json_string, string $context): array|WP_Error // MODIFIED to public
+    {if (trim($json_string) === '') {
+        return [];
+    }
+        $decoded = json_decode($json_string, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            /* translators: %1$s: The context of the API call (e.g., "OpenAI Models"), %2$s: The specific JSON error message from PHP. */
+            $error_message = sprintf(__('Failed to parse JSON response from %1$s. Error: %2$s', 'gpt3-ai-content-generator'), $context, json_last_error_msg());
+            return new WP_Error('json_decode_error', $error_message);
+        }
+        return is_array($decoded) ? $decoded : [];
+    }
+
+================================================================================
+FUNCION: format_model_list
+Resumen: Función que maneja $human.
+CODIGO:
+function format_model_list(array $raw_models, string $id_key = 'id', string $name_key = 'id'): array // MODIFIED to public (was protected)
+    {$formatted = [];
+        if (!is_array($raw_models)) {
+            return [];
+        }
+        foreach ($raw_models as $model) {
+            if (!is_array($model)) {
+                continue;
+            }
+            $id = $model[$id_key] ?? null;
+            if (!empty($id)) {
+                $name = $model[$name_key] ?? $id;
+                $formatted[] = [
+                    'id'   => $id,
+                    'name' => $name,
+                    'status' => $model['status'] ?? null,
+                    'version' => $model['version'] ?? null,
+                ];
+            }
+        }
+        usort($formatted, fn ($a, $b) => strcasecmp($a['name'] ?? '', $b['name'] ?? ''));
+        return $formatted;
+    }
+
+================================================================================
+FUNCION: format_headers_for_curl
+Resumen: Función que maneja $human.
+CODIGO:
+function format_headers_for_curl(array $headers): array
+    {
+        $result = [];
+        foreach ($headers as $k => $v) {
+            $result[] = $k . ': ' . $v;
+        }
+        return $result;
+    }
+
+================================================================================
+FUNCION: get_request_options
+Resumen: Función que maneja $human.
+CODIGO:
+function get_request_options(string $operation): array
+    {
+        return [
+           'method'     => 'POST',
+           'timeout'    => ($operation === 'stream') ? 120 : 60,
+           'user-agent' => 'AIPKit/' . (defined('WPAICG_VERSION') ? WPAICG_VERSION : '1.0') . '; ' . get_bloginfo('url'),
+           'sslverify'  => apply_filters('https_local_ssl_verify', true),
+        ];
+    }
+
+================================================================================
+FUNCION: build_api_url
+Resumen: Función que maneja $human.
+CODIGO:
+function build_api_url(string $operation, array $params): string|WP_Error;
+    abstract public function get_api_headers(string $api_key, string $operation): array;
+    abstract public function format_chat_payload(string $user_message, string $instructions, array $history, array $ai_params, string $model): array;
+    abstract public function parse_chat_response(array $decoded_response, array $request_data): array|WP_Error;
+    abstract public function parse_error_response($response_body, int $status_code): string; // Kept abstract, to be implemented by each strategy
+    abstract public function get_models(array $api_params): array|WP_Error;
+    abstract public function build_sse_payload(array $messages, $system_instruction, array $ai_params, string $model): array;
+    abstract public function parse_sse_chunk(string $sse_chunk, string &$current_buffer): array;
+    abstract public function generate_embeddings($input, array $api_params, array $options = []): array|WP_Error;
+}
+
+---
+A4) AI Caller (core API request flow)
+File: classes/core/class-aipkit_ai_caller.php
+---
+<?php
+
+// File: /Applications/MAMP/htdocs/wordpress/wp-content/plugins/gpt3-ai-content-generator/classes/core/class-aipkit_ai_caller.php
+// Status: MODIFIED
+
+namespace WPAICG\Core;
+
+use WPAICG\AIPKit_Providers;
+use WPAICG\AIPKIT_AI_Settings;
+use WPAICG\Core\Providers\ProviderStrategyFactory;
+use WPAICG\Core\Providers\ProviderStrategyInterface;
+use WPAICG\Core\Providers\Google\GoogleSettingsHandler;
+use WPAICG\Core\AIPKit_Payload_Sanitizer;
+use WP_Error;
+use WPAICG\Core\AIPKit_Instruction_Manager;
+
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
+
+================================================================================
+FUNCION: get_api_headers
+Resumen: Función que maneja $human.
+CODIGO:
+function get_api_headers(string $api_key, string $operation): array;
+    abstract public function format_chat_payload(string $user_message, string $instructions, array $history, array $ai_params, string $model): array;
+    abstract public function parse_chat_response(array $decoded_response, array $request_data): array|WP_Error;
+    abstract public function parse_error_response($response_body, int $status_code): string; // Kept abstract, to be implemented by each strategy
+    abstract public function get_models(array $api_params): array|WP_Error;
+    abstract public function build_sse_payload(array $messages, $system_instruction, array $ai_params, string $model): array;
+    abstract public function parse_sse_chunk(string $sse_chunk, string &$current_buffer): array;
+    abstract public function generate_embeddings($input, array $api_params, array $options = []): array|WP_Error;
+}
+
+---
+A4) AI Caller (core API request flow)
+File: classes/core/class-aipkit_ai_caller.php
+---
+<?php
+
+// File: /Applications/MAMP/htdocs/wordpress/wp-content/plugins/gpt3-ai-content-generator/classes/core/class-aipkit_ai_caller.php
+// Status: MODIFIED
+
+namespace WPAICG\Core;
+
+use WPAICG\AIPKit_Providers;
+use WPAICG\AIPKIT_AI_Settings;
+use WPAICG\Core\Providers\ProviderStrategyFactory;
+use WPAICG\Core\Providers\ProviderStrategyInterface;
+use WPAICG\Core\Providers\Google\GoogleSettingsHandler;
+use WPAICG\Core\AIPKit_Payload_Sanitizer;
+use WP_Error;
+use WPAICG\Core\AIPKit_Instruction_Manager;
+
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
+
+================================================================================
+FUNCION: format_chat_payload
+Resumen: Función que maneja $human.
+CODIGO:
+function format_chat_payload(string $user_message, string $instructions, array $history, array $ai_params, string $model): array;
+    abstract public function parse_chat_response(array $decoded_response, array $request_data): array|WP_Error;
+    abstract public function parse_error_response($response_body, int $status_code): string; // Kept abstract, to be implemented by each strategy
+    abstract public function get_models(array $api_params): array|WP_Error;
+    abstract public function build_sse_payload(array $messages, $system_instruction, array $ai_params, string $model): array;
+    abstract public function parse_sse_chunk(string $sse_chunk, string &$current_buffer): array;
+    abstract public function generate_embeddings($input, array $api_params, array $options = []): array|WP_Error;
+}
+
+---
+A4) AI Caller (core API request flow)
+File: classes/core/class-aipkit_ai_caller.php
+---
+<?php
+
+// File: /Applications/MAMP/htdocs/wordpress/wp-content/plugins/gpt3-ai-content-generator/classes/core/class-aipkit_ai_caller.php
+// Status: MODIFIED
+
+namespace WPAICG\Core;
+
+use WPAICG\AIPKit_Providers;
+use WPAICG\AIPKIT_AI_Settings;
+use WPAICG\Core\Providers\ProviderStrategyFactory;
+use WPAICG\Core\Providers\ProviderStrategyInterface;
+use WPAICG\Core\Providers\Google\GoogleSettingsHandler;
+use WPAICG\Core\AIPKit_Payload_Sanitizer;
+use WP_Error;
+use WPAICG\Core\AIPKit_Instruction_Manager;
+
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
+
+================================================================================
+FUNCION: parse_chat_response
+Resumen: Función que maneja $human.
+CODIGO:
+function parse_chat_response(array $decoded_response, array $request_data): array|WP_Error;
+    abstract public function parse_error_response($response_body, int $status_code): string; // Kept abstract, to be implemented by each strategy
+    abstract public function get_models(array $api_params): array|WP_Error;
+    abstract public function build_sse_payload(array $messages, $system_instruction, array $ai_params, string $model): array;
+    abstract public function parse_sse_chunk(string $sse_chunk, string &$current_buffer): array;
+    abstract public function generate_embeddings($input, array $api_params, array $options = []): array|WP_Error;
+}
+
+---
+A4) AI Caller (core API request flow)
+File: classes/core/class-aipkit_ai_caller.php
+---
+<?php
+
+// File: /Applications/MAMP/htdocs/wordpress/wp-content/plugins/gpt3-ai-content-generator/classes/core/class-aipkit_ai_caller.php
+// Status: MODIFIED
+
+namespace WPAICG\Core;
+
+use WPAICG\AIPKit_Providers;
+use WPAICG\AIPKIT_AI_Settings;
+use WPAICG\Core\Providers\ProviderStrategyFactory;
+use WPAICG\Core\Providers\ProviderStrategyInterface;
+use WPAICG\Core\Providers\Google\GoogleSettingsHandler;
+use WPAICG\Core\AIPKit_Payload_Sanitizer;
+use WP_Error;
+use WPAICG\Core\AIPKit_Instruction_Manager;
+
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
+
+================================================================================
+FUNCION: parse_error_response
+Resumen: Función que maneja $human.
+CODIGO:
+function parse_error_response($response_body, int $status_code): string; // Kept abstract, to be implemented by each strategy
+    abstract public function get_models(array $api_params): array|WP_Error;
+    abstract public function build_sse_payload(array $messages, $system_instruction, array $ai_params, string $model): array;
+    abstract public function parse_sse_chunk(string $sse_chunk, string &$current_buffer): array;
+    abstract public function generate_embeddings($input, array $api_params, array $options = []): array|WP_Error;
+}
+
+---
+A4) AI Caller (core API request flow)
+File: classes/core/class-aipkit_ai_caller.php
+---
+<?php
+
+// File: /Applications/MAMP/htdocs/wordpress/wp-content/plugins/gpt3-ai-content-generator/classes/core/class-aipkit_ai_caller.php
+// Status: MODIFIED
+
+namespace WPAICG\Core;
+
+use WPAICG\AIPKit_Providers;
+use WPAICG\AIPKIT_AI_Settings;
+use WPAICG\Core\Providers\ProviderStrategyFactory;
+use WPAICG\Core\Providers\ProviderStrategyInterface;
+use WPAICG\Core\Providers\Google\GoogleSettingsHandler;
+use WPAICG\Core\AIPKit_Payload_Sanitizer;
+use WP_Error;
+use WPAICG\Core\AIPKit_Instruction_Manager;
+
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
+
+================================================================================
+FUNCION: get_models
+Resumen: Función que maneja $human.
+CODIGO:
+function get_models(array $api_params): array|WP_Error;
+    abstract public function build_sse_payload(array $messages, $system_instruction, array $ai_params, string $model): array;
+    abstract public function parse_sse_chunk(string $sse_chunk, string &$current_buffer): array;
+    abstract public function generate_embeddings($input, array $api_params, array $options = []): array|WP_Error;
+}
+
+---
+A4) AI Caller (core API request flow)
+File: classes/core/class-aipkit_ai_caller.php
+---
+<?php
+
+// File: /Applications/MAMP/htdocs/wordpress/wp-content/plugins/gpt3-ai-content-generator/classes/core/class-aipkit_ai_caller.php
+// Status: MODIFIED
+
+namespace WPAICG\Core;
+
+use WPAICG\AIPKit_Providers;
+use WPAICG\AIPKIT_AI_Settings;
+use WPAICG\Core\Providers\ProviderStrategyFactory;
+use WPAICG\Core\Providers\ProviderStrategyInterface;
+use WPAICG\Core\Providers\Google\GoogleSettingsHandler;
+use WPAICG\Core\AIPKit_Payload_Sanitizer;
+use WP_Error;
+use WPAICG\Core\AIPKit_Instruction_Manager;
+
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
+
+================================================================================
+FUNCION: build_sse_payload
+Resumen: Función que maneja $human.
+CODIGO:
+function build_sse_payload(array $messages, $system_instruction, array $ai_params, string $model): array;
+    abstract public function parse_sse_chunk(string $sse_chunk, string &$current_buffer): array;
+    abstract public function generate_embeddings($input, array $api_params, array $options = []): array|WP_Error;
+}
+
+---
+A4) AI Caller (core API request flow)
+File: classes/core/class-aipkit_ai_caller.php
+---
+<?php
+
+// File: /Applications/MAMP/htdocs/wordpress/wp-content/plugins/gpt3-ai-content-generator/classes/core/class-aipkit_ai_caller.php
+// Status: MODIFIED
+
+namespace WPAICG\Core;
+
+use WPAICG\AIPKit_Providers;
+use WPAICG\AIPKIT_AI_Settings;
+use WPAICG\Core\Providers\ProviderStrategyFactory;
+use WPAICG\Core\Providers\ProviderStrategyInterface;
+use WPAICG\Core\Providers\Google\GoogleSettingsHandler;
+use WPAICG\Core\AIPKit_Payload_Sanitizer;
+use WP_Error;
+use WPAICG\Core\AIPKit_Instruction_Manager;
+
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
+
+================================================================================
+FUNCION: parse_sse_chunk
+Resumen: Función que maneja $human.
+CODIGO:
+function parse_sse_chunk(string $sse_chunk, string &$current_buffer): array;
+    abstract public function generate_embeddings($input, array $api_params, array $options = []): array|WP_Error;
+}
+
+---
+A4) AI Caller (core API request flow)
+File: classes/core/class-aipkit_ai_caller.php
+---
+<?php
+
+// File: /Applications/MAMP/htdocs/wordpress/wp-content/plugins/gpt3-ai-content-generator/classes/core/class-aipkit_ai_caller.php
+// Status: MODIFIED
+
+namespace WPAICG\Core;
+
+use WPAICG\AIPKit_Providers;
+use WPAICG\AIPKIT_AI_Settings;
+use WPAICG\Core\Providers\ProviderStrategyFactory;
+use WPAICG\Core\Providers\ProviderStrategyInterface;
+use WPAICG\Core\Providers\Google\GoogleSettingsHandler;
+use WPAICG\Core\AIPKit_Payload_Sanitizer;
+use WP_Error;
+use WPAICG\Core\AIPKit_Instruction_Manager;
+
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
+
+================================================================================
+FUNCION: generate_embeddings
+Resumen: Función que maneja $human.
+CODIGO:
+function generate_embeddings($input, array $api_params, array $options = []): array|WP_Error;
+}
+
+---
+A4) AI Caller (core API request flow)
+File: classes/core/class-aipkit_ai_caller.php
+---
+<?php
+
+// File: /Applications/MAMP/htdocs/wordpress/wp-content/plugins/gpt3-ai-content-generator/classes/core/class-aipkit_ai_caller.php
+// Status: MODIFIED
+
+namespace WPAICG\Core;
+
+use WPAICG\AIPKit_Providers;
+use WPAICG\AIPKIT_AI_Settings;
+use WPAICG\Core\Providers\ProviderStrategyFactory;
+use WPAICG\Core\Providers\ProviderStrategyInterface;
+use WPAICG\Core\Providers\Google\GoogleSettingsHandler;
+use WPAICG\Core\AIPKit_Payload_Sanitizer;
+use WP_Error;
+use WPAICG\Core\AIPKit_Instruction_Manager;
+
+if (!defined('ABSPATH')) {
+    exit; // Exit if accessed directly
+}
+
+================================================================================
+FUNCION: make_standard_call
+Resumen: Función que maneja $human.
+CODIGO:
+    public function make_standard_call(
+
+================================================================================
+FUNCION: get_current_provider
+Resumen: Función que maneja $human.
+CODIGO:
+function get_current_provider()
+    {
+        // --- FIX: Safely retrieve options ---
+        $opts = get_option('aipkit_options');
+        if (!is_array($opts)) {
+            $opts = [];
+        }
+        // --- END FIX ---
+        return isset($opts['provider']) ? $opts['provider'] : 'OpenAI';
+    }
+
+================================================================================
+FUNCION: get_all_providers
+Resumen: Función que maneja $human.
+CODIGO:
+    public static function get_all_providers()
+
+================================================================================
+FUNCION: init
+Resumen: Función que maneja $human.
+CODIGO:
+function init() {
+            // Ensure Google Settings Handler is loaded
+            $google_settings_handler_path = WPAICG_PLUGIN_DIR . 'classes/core/providers/google/GoogleSettingsHandler.php';
+            if (!class_exists(GoogleSettingsHandler::class) && file_exists($google_settings_handler_path)) {
+                 require_once $google_settings_handler_path;
+            }
+
+            // Initialize Google safety settings via the handler if available
+            if (class_exists(GoogleSettingsHandler::class) && method_exists(GoogleSettingsHandler::class, 'check_and_init_safety_settings')) {
+                GoogleSettingsHandler::check_and_init_safety_settings();
+            }
+            // Initialize core settings
+            self::check_and_init_ai_parameters();
+            self::check_and_init_api_keys();
+        }
+
+================================================================================
+FUNCION: check_and_init_ai_parameters
+Resumen: Función que maneja $human.
+CODIGO:
+function check_and_init_ai_parameters() {
+            $opts = get_option('aipkit_options', array());
+            if (!isset($opts['ai_parameters']) || !is_array($opts['ai_parameters'])) {
+                $opts['ai_parameters'] = self::$default_ai_params;
+                update_option('aipkit_options', $opts, 'no');
+            } else {
+                // Ensure all default keys exist and remove obsolete ones
+                $final_params = [];
+                foreach (self::$default_ai_params as $key => $default_value) {
+                    $final_params[$key] = $opts['ai_parameters'][$key] ?? $default_value;
+                }
+                if ($final_params !== $opts['ai_parameters']) {
+                    $opts['ai_parameters'] = $final_params;
+                    update_option('aipkit_options', $opts, 'no');
+                }
+            }
+        }
+
+================================================================================
+FUNCION: check_and_init_api_keys
+Resumen: Función que maneja $human.
+CODIGO:
+function check_and_init_api_keys() {
+             $opts = get_option('aipkit_options', array());
+             if (!isset($opts['api_keys']) || !is_array($opts['api_keys'])) {
+                 $opts['api_keys'] = self::$default_api_keys;
+                 update_option('aipkit_options', $opts, 'no');
+             } else {
+                 $merged = array_merge(self::$default_api_keys, $opts['api_keys']);
+                 if ($merged !== $opts['api_keys']) {
+                     $opts['api_keys'] = $merged;
+                     update_option('aipkit_options', $opts, 'no');
+                 }
+             }
+        }
+
+================================================================================
+FUNCION: get_ai_parameters
+Resumen: Función que maneja $human.
+CODIGO:
+function get_ai_parameters(): array {
+            $opts = get_option('aipkit_options', array());
+            self::check_and_init_ai_parameters(); // Ensure initialized
+            $opts = get_option('aipkit_options', array()); // Re-fetch
+            return $opts['ai_parameters'] ?? self::$default_ai_params;
+        }
+
+================================================================================
+FUNCION: get_api_keys
+Resumen: Función que maneja $human.
+CODIGO:
+function get_api_keys(): array {
+             $opts = get_option('aipkit_options', array());
+             self::check_and_init_api_keys(); // Ensure initialized
+             $opts = get_option('aipkit_options', array()); // Re-fetch
+             return $opts['api_keys'] ?? self::$default_api_keys;
+        }
+

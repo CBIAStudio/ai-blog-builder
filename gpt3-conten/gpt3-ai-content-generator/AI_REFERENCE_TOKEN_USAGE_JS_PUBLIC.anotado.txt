@@ -1,0 +1,123 @@
+﻿================================================================================
+FUNCION: n
+Resumen: Función que maneja $human.
+CODIGO:
+function n(i,o,t,a,r,s,l,p,d,u,_,f){let m=0;s&&(s.textContent=_.generatingVideo||"Generating Video..."),r.innerHTML='<p class="aipkit_image_results_placeholder" style="text-align:center;"><span class="aipkit_spinner" style="display:inline-block;"></span> Video generation in progress...</p>';function g(){if(m>=60){r.innerHTML='<p class="aipkit_image_results_message aipkit_message-error">Video generation timed out. Please try again.</p>',a.disabled=!1,s&&(s.textContent=p),l&&(l.style.display="none");return}m++;let k=Math.min(m/60*100,95);r.innerHTML=`<p class="aipkit_image_results_placeholder" style="text-align:center;">
+        <span class="aipkit_spinner" style="display:inline-block;"></span> 
+        Generating video... (${Math.round(k)}%)
+      </p>`;let y=new FormData;y.append("action","aipkit_check_video_status"),y.append("_ajax_nonce",t),y.append("operation_name",i),y.append("model_id",o),y.append("prompt",u),fetch(window.aipkit_image_generator_config_public.ajaxUrl,{method:"POST",body:y,credentials:"same-origin"}).then(I=>I.json()).then(I=>{if(I.success)if(I.data.status==="completed")e(I.data,a,r,s,l,p,d,u,_,f);else if(I.data.status==="processing")setTimeout(g,5e3);else throw new Error(`Unknown status: ${I.data.status}`);else throw new Error(I.data?.message||"Status check failed")}).catch(I=>{console.error("AIPKit Video Status Check Error:",I),r.innerHTML=`<p class="aipkit_image_results_message aipkit_message-error">Video generation failed: ${f(I.message||"Unknown error")}</p>`,a.disabled=!1,s&&(s.textContent=p),l&&(l.style.display="none")})}setTimeout(g,5e3)}
+
+================================================================================
+FUNCION: g
+Resumen: Función que maneja $human.
+CODIGO:
+function g(){if(m>=60){r.innerHTML='<p class="aipkit_image_results_message aipkit_message-error">Video generation timed out. Please try again.</p>',a.disabled=!1,s&&(s.textContent=p),l&&(l.style.display="none");return}m++;let k=Math.min(m/60*100,95);r.innerHTML=`<p class="aipkit_image_results_placeholder" style="text-align:center;">
+        <span class="aipkit_spinner" style="display:inline-block;"></span> 
+        Generating video... (${Math.round(k)}%)
+      </p>`;let y=new FormData;y.append("action","aipkit_check_video_status"),y.append("_ajax_nonce",t),y.append("operation_name",i),y.append("model_id",o),y.append("prompt",u),fetch(window.aipkit_image_generator_config_public.ajaxUrl,{method:"POST",body:y,credentials:"same-origin"}).then(I=>I.json()).then(I=>{if(I.success)if(I.data.status==="completed")e(I.data,a,r,s,l,p,d,u,_,f);else if(I.data.status==="processing")setTimeout(g,5e3);else throw new Error(`Unknown status: ${I.data.status}`);else throw new Error(I.data?.message||"Status check failed")}).catch(I=>{console.error("AIPKit Video Status Check Error:",I),r.innerHTML=`<p class="aipkit_image_results_message aipkit_message-error">Video generation failed: ${f(I.message||"Unknown error")}</p>`,a.disabled=!1,s&&(s.textContent=p),l&&(l.style.display="none")})}
+
+================================================================================
+FUNCION: e
+Resumen: Función que maneja $human.
+CODIGO:
+function e(i,o,t,a,r,s,l,p,d,u){let _=i.images||i.videos||[];if(_.length>0)t.innerHTML="",_.forEach(f=>{let w=document.createElement("div");w.className=l?"aipkit_video_result":"aipkit_image_result";let h="",m=f.media_library_url||f.url||null,g=l?d.viewFullVideo||"Click to view full video":d.viewFullImage||"Click to view full image";if(l)if(f.url){let k=`<video controls preload="metadata" style="max-width: 100%; height: auto;">
+              <source src="${u(f.url)}" type="video/mp4">
+              Your browser does not support the video tag.
+            </video>`;m&&m!==f.url?h=`<a href="${u(m)}" target="_blank" rel="noopener noreferrer" title="${u(g)}">${k}</a>`:h=k}else h='<p class="aipkit_video_results_message aipkit_message-error">Error: No video data found.</p>';else{let k=f.url||(f.b64_json?`data:image/png;base64,${f.b64_json}`:null);if(k){let y=`<img src="${u(k)}" alt="${u(p)}">`;m?h=`<a href="${u(m)}" target="_blank" rel="noopener noreferrer" title="${u(g)}">${y}</a>`:h=y}else h='<p class="aipkit_image_results_message aipkit_message-error">Error: No image data found.</p>'}if(w.innerHTML=h,f.revised_prompt){let k=document.createElement("p");k.style.fontSize="11px",k.style.fontStyle="italic",k.style.marginTop="5px",k.textContent=`Revised: ${f.revised_prompt}`,w.appendChild(k)}t.appendChild(w)});else{let f=l?"videos":"images";t.innerHTML=`<p class="aipkit_image_results_message aipkit_message-info">${d.initialPlaceholder||`No ${f} returned. Try a different prompt.`}</p>`}o.disabled=!1,a&&(a.textContent=s),r&&(r.style.display="none")}
+
+================================================================================
+FUNCION: c
+Resumen: Función que maneja $human.
+CODIGO:
+function c(n){let e=n.currentTarget;if(e.disabled)return;let i=e.closest("#aipkit_public_image_generator");if(!i)return;let t=(window.aipkit_image_generator_config_public||{}).ajaxUrl||window.aipkit_dashboard?.ajaxurl,a=i.querySelector("#aipkit_image_generator_public_nonce")?.value,r=i.querySelector(".aipkit-image-history-grid");if(!t||!a||!r){console.error("Image History Load More: Missing required elements or config.");return}let s=parseInt(e.dataset.currentPage,10)||1,l=parseInt(e.dataset.maxPages,10)||1,p=s+1;if(p>l)return;let d=e.querySelector(".aipkit_btn-icon-content"),u=e.querySelector(".aipkit_spinner");d&&(d.style.display="none"),u&&(u.style.display="inline-block"),e.disabled=!0;let _=new FormData;_.append("action","aipkit_load_more_image_history"),_.append("_ajax_nonce",a),_.append("page",p),fetch(t,{method:"POST",body:_,credentials:"same-origin"}).then(f=>f.json()).then(f=>{if(!f.success)throw new Error(f.data?.message||"Failed to load more images.");f.data.html&&r.insertAdjacentHTML("beforeend",f.data.html),e.dataset.currentPage=p,f.data.has_more||(e.style.display="none")}).catch(f=>{console.error("Image History Load More Error:",f)}).finally(()=>{d&&(d.style.display="inline-block"),u&&(u.style.display="none"),p<l?e.disabled=!1:e.style.display="none"})}
+
+================================================================================
+FUNCION: c
+Resumen: Función que maneja $human.
+CODIGO:
+function c(){let n=document.getElementById("aipkit_public_image_generator");if(!n)return;let e=n.querySelector("#aipkit_public_generate_image_btn"),i=n.querySelector("#aipkit_public_image_results"),o=n.querySelector("#aipkit_public_image_provider"),t=n.querySelector("#aipkit_public_image_model"),a=n.dataset.allowedModels||"",r=n.querySelector(".aipkit-image-history-grid"),s=n.querySelector(".aipkit-image-history-load-more-btn");if(!e||!i){console.error("AIPKit Image Generator (Public): Could not find essential UI elements (button, results)."),i&&(i.innerHTML='<p class="aipkit_image_results_message aipkit_message-error">Error: Core UI elements missing.</p>'),i.style.display="grid";return}o&&t&&typeof window.aipkit_populatePublicModelsForProvider=="function"&&(window.aipkit_populatePublicModelsForProvider(o.value,t,a),o.addEventListener("change",()=>{window.aipkit_populatePublicModelsForProvider(o.value,t,a)})),e.dataset.listenerAttached!=="true"&&(e.addEventListener("click",window.aipkit_handlePublicImageGeneration),e.dataset.listenerAttached="true"),r&&r.addEventListener("click",window.aipkit_handleDeleteImage),s&&s.addEventListener("click",window.aipkit_handleLoadMoreHistory),i&&(i.style.display="none",i.innerHTML="")}
+
+================================================================================
+FUNCION: c
+Resumen: Función que maneja $human.
+CODIGO:
+function c(i,o,t,a){let r=window.aipkit_token_usage_config||{},s=r.text||{},l=document.createElement("div");l.className="aipkit-usage-details-table-container";let p=document.createElement("div");p.className="aipkit-usage-details-pagination-container",a.appendChild(l),a.appendChild(p),l.innerHTML=`<p style="text-align:center;"><span class="aipkit_spinner" style="display:inline-block;width:20px;height:20px;"></span> ${s.loadingDetails||"Loading details..."}</p>`;let d={action:"aipkit_get_token_usage_details",nonce:r.nonce,module:i,context_id:o,page:t},u=new FormData;for(let _ in d)u.append(_,d[_]);fetch(r.ajaxUrl,{method:"POST",body:u,credentials:"same-origin"}).then(_=>_.json()).then(_=>{if(!_.success)throw new Error(_.data?.message||"Failed to load data.");n(_.data.items,l),e(_.data.pagination,p,i,o,a)}).catch(_=>{console.error("Error fetching token usage details:",_),l.innerHTML=`<p style="color:red;text-align:center;">${s.errorLoading||"Error loading details."} (${_.message})</p>`})}
+
+================================================================================
+FUNCION: n
+Resumen: Función que maneja $human.
+CODIGO:
+function n(i,o){if(!i||i.length===0){o.innerHTML='<p style="text-align:center;">No detailed usage records found for this period.</p>';return}let t='<table class="aipkit_usage_details_table"><thead><tr><th>Date & Time</th><th>Tokens Used</th></tr></thead><tbody>';i.forEach(a=>{let s=new Date(a.timestamp*1e3).toLocaleString(void 0,{dateStyle:"medium",timeStyle:"short"});t+=`<tr><td>${s}</td><td>${a.tokens.toLocaleString()}</td></tr>`}),t+="</tbody></table>",o.innerHTML=t}
+
+================================================================================
+FUNCION: e
+Resumen: Función que maneja $human.
+CODIGO:
+function e(i,o,t,a,r){let{currentPage:s,totalPages:l}=i,p=window.aipkit_token_usage_config?.text||{};if(o.innerHTML="",l<=1)return;let d=document.createElement("button");d.className="aipkit_btn aipkit_btn-secondary aipkit_btn-small",d.textContent=p.previous||"Previous",d.disabled=s<=1,d.addEventListener("click",()=>c(t,a,s-1,r)),o.appendChild(d);let u=document.createElement("span");u.className="aipkit_pagination-current",u.textContent=`${p.pageLabel||"Page"} ${s} ${p.ofLabel||"of"} ${l}`,o.appendChild(u);let _=document.createElement("button");_.className="aipkit_btn aipkit_btn-secondary aipkit_btn-small",_.textContent=p.next||"Next",_.disabled=s>=l,_.addEventListener("click",()=>c(t,a,s+1,r)),o.appendChild(_)}
+
+================================================================================
+FUNCION: c
+Resumen: Función que maneja $human.
+CODIGO:
+function c(e){e.preventDefault();let i=e.target,o=i.querySelector(".aipkit_semantic_search_input"),t=i.querySelector(".aipkit_semantic_search_button"),a=i.closest(".aipkit_semantic_search_wrapper"),r=a.querySelector(".aipkit_semantic_search_results");if(!o||!t||!a||!r){console.error("Semantic Search: Missing required form elements.");return}let s=o.value.trim();if(!s)return;let l=window.aipkit_semantic_search_config||{},p=l.text||{};t.disabled=!0;let d=t.querySelector(".aipkit_spinner");d&&(d.style.display="inline-block"),r.innerHTML='<div class="aipkit-search-loading"><span class="aipkit_spinner"></span></div>';let u={query:s};window.aipkit_frontendApiRequest("aipkit_perform_semantic_search",u,l).then(_=>{r.innerHTML=_.html||`<p>${l.settings.no_results_text||"No results found."}</p>`}).catch(_=>{console.error("Semantic Search Error:",_),r.innerHTML=`<p class="aipkit-search-error">${p.error||"An error occurred while searching."}</p>`}).finally(()=>{t.disabled=!1,d&&(d.style.display="none")})}
+
+================================================================================
+FUNCION: n
+Resumen: Función que maneja $human.
+CODIGO:
+function n(){document.querySelectorAll(".aipkit_semantic_search_form").forEach(i=>{i.dataset.listenerAttached!=="true"&&(i.addEventListener("submit",c),i.dataset.listenerAttached="true")})}
+
+================================================================================
+FUNCION: c
+Resumen: Función que maneja $human.
+CODIGO:
+function c(n,e,i){if(!n)return console.error("AIPKit ShowConsentBox: mainChatEl not found."),null;let o=n.querySelector(".aipkit_consent_overlay");if(!o){o=document.createElement("div"),o.className="aipkit_consent_overlay",o.innerHTML=`
+                <h5 class="aipkit_consent_title">${e.text.consentTitle||"Consent Required"}</h5>
+                <p class="aipkit_consent_message">${e.text.consentMessage||"Please agree to continue."}</p>
+                <button type="button" class="aipkit_btn aipkit_btn-primary aipkit_consent_agree_btn">
+                    ${e.text.consentButton||"I Agree"}
+                </button>
+            `;let t=n.querySelector(".aipkit_chat_input");t?t.appendChild(o):n.appendChild(o);let a=o.querySelector(".aipkit_consent_agree_btn");a&&typeof i=="function"&&a.addEventListener("click",i)}return o.classList.remove("aipkit_hidden"),o}
+
+================================================================================
+FUNCION: c
+Resumen: Función que maneja $human.
+CODIGO:
+function c(n){n&&n.classList.add("aipkit_hidden")}
+
+================================================================================
+FUNCION: c
+Resumen: Función que maneja $human.
+CODIGO:
+function c(n,e,i,o,t,a){n.consentGiven=!0,localStorage.setItem(e,"true"),typeof t=="function"&&a&&t(a);let r=o.closest("[data-bot-id]")?.dataset.botId||"unknown";typeof i=="function"&&i();let s=o.closest(".aipkit_chat_container");s&&s.dispatchEvent(new CustomEvent("aipkit:consentGiven"))}
+
+================================================================================
+FUNCION: c
+Resumen: Función que maneja $human.
+CODIGO:
+function c(n,e,i,o){let t=e.botId,a=`aipkit_chatbot_consent_given_${t}`;i.consentGiven=localStorage.getItem(a)==="true";let r=null;function s(){typeof window.aipkit_chatUI_handleConsentAgree=="function"?window.aipkit_chatUI_handleConsentAgree(i,a,o,n,p,r):console.error(`AIPKit Consent UI Init (${t}): aipkit_chatUI_handleConsentAgree helper function not found.`)}function l(){typeof window.aipkit_chatUI_showConsentBox=="function"?r=window.aipkit_chatUI_showConsentBox(n,e,s):console.error(`AIPKit Consent UI Init (${t}): aipkit_chatUI_showConsentBox helper function not found.`)}function p(){r&&typeof window.aipkit_chatUI_hideConsentBox=="function"?window.aipkit_chatUI_hideConsentBox(r):r&&console.error(`AIPKit Consent UI Init (${t}): aipkit_chatUI_hideConsentBox helper function not found.`)}return e.requireConsentCompliance&&!i.consentGiven&&l(),{showConsentBoxIfNeeded:()=>e.requireConsentCompliance&&!i.consentGiven?(l(),!0):!1,isConsentGiven:()=>i.consentGiven}}
+
+================================================================================
+FUNCION: s
+Resumen: Función que maneja $human.
+CODIGO:
+function s(){typeof window.aipkit_chatUI_handleConsentAgree=="function"?window.aipkit_chatUI_handleConsentAgree(i,a,o,n,p,r):console.error(`AIPKit Consent UI Init (${t}): aipkit_chatUI_handleConsentAgree helper function not found.`)}
+
+================================================================================
+FUNCION: l
+Resumen: Función que maneja $human.
+CODIGO:
+function l(){typeof window.aipkit_chatUI_showConsentBox=="function"?r=window.aipkit_chatUI_showConsentBox(n,e,s):console.error(`AIPKit Consent UI Init (${t}): aipkit_chatUI_showConsentBox helper function not found.`)}
+
+================================================================================
+FUNCION: p
+Resumen: Función que maneja $human.
+CODIGO:
+function p(){r&&typeof window.aipkit_chatUI_hideConsentBox=="function"?window.aipkit_chatUI_hideConsentBox(r):r&&console.error(`AIPKit Consent UI Init (${t}): aipkit_chatUI_hideConsentBox helper function not found.`)}
+
+================================================================================
+FUNCION: c
+Resumen: Función que maneja $human.
+CODIGO:
+            `;let t=n.querySelector(".aipkit_chat_input");t?t.appendChild(o):n.appendChild(o);let a=o.querySelector(".aipkit_consent_agree_btn");a&&typeof i=="function"&&a.addEventListener("click",i)}return o.classList.remove("aipkit_hidden"),o}window.aipkit_chatUI_showConsentBox=c})();(function(){"use strict";function c(n){n&&n.classList.add("aipkit_hidden")}window.aipkit_chatUI_hideConsentBox=c})();(function(){"use strict";function c(n,e,i,o,t,a){n.consentGiven=!0,localStorage.setItem(e,"true"),typeof t=="function"&&a&&t(a);let r=o.closest("[data-bot-id]")?.dataset.botId||"unknown";typeof i=="function"&&i();let s=o.closest(".aipkit_chat_container");s&&s.dispatchEvent(new CustomEvent("aipkit:consentGiven"))}window.aipkit_chatUI_handleConsentAgree=c})();(function(){"use strict";function c(n,e,i,o){let t=e.botId,a=`aipkit_chatbot_consent_given_${t}`;i.consentGiven=localStorage.getItem(a)==="true";let r=null;function s(){typeof window.aipkit_chatUI_handleConsentAgree=="function"?window.aipkit_chatUI_handleConsentAgree(i,a,o,n,p,r):console.error(`AIPKit Consent UI Init (${t}): aipkit_chatUI_handleConsentAgree helper function not found.`)}function l(){typeof window.aipkit_chatUI_showConsentBox=="function"?r=window.aipkit_chatUI_showConsentBox(n,e,s):console.error(`AIPKit Consent UI Init (${t}): aipkit_chatUI_showConsentBox helper function not found.`)}function p(){r&&typeof window.aipkit_chatUI_hideConsentBox=="function"?window.aipkit_chatUI_hideConsentBox(r):r&&console.error(`AIPKit Consent UI Init (${t}): aipkit_chatUI_hideConsentBox helper function not found.`)}return e.requireConsentCompliance&&!i.consentGiven&&l(),{showConsentBoxIfNeeded:()=>e.requireConsentCompliance&&!i.consentGiven?(l(),!0):!1,isConsentGiven:()=>i.consentGiven}}window.aipkit_initConsentUI=c})();(function(){"use strict";function c(n,e){let{messagesEl:i}=n;if(!i||!e||!e.text){console.error("AIPKit Download PDF: Missing messages element or config.");return}if(typeof window.aipkit_chatUI_extractTextFromBubble!="function"||typeof window.aipkit_chatUI_generateDownloadFilename!="function"||typeof window.aipkit_chatUI_triggerBlobDownload!="function"){console.error("AIPKit Download PDF: One or more helper functions (extractText, generateFilename, triggerBlobDownload) not found."),alert("Error: Could not prepare PDF download.");return}if(typeof window.jspdf>"u"||typeof window.jspdf.jsPDF>"u"){console.error("AIPKit Download PDF: jsPDF library is not loaded."),alert(e.text.pdfError||"Could not generate PDF. jsPDF library might be missing.");return}let{jsPDF:o}=window.jspdf,t=new o,a=i.querySelectorAll(".aipkit_chat_message"),r=e?.headerName||"Bot",s=e.text.userPrefix||"User",l=e.text.errorPrefix||"Error",p=10,d=t.internal.pageSize.height,u=10,_=6,f=d-u*2,w=!1;if(t.setFontSize(16),t.text(`Chat Transcript - ${r}`,u,p),p+=_*2,t.setFontSize(12),a.forEach(m=>{let g=m.querySelector(".aipkit_chat_bubble");if(!g)return;let k=window.aipkit_chatUI_extractTextFromBubble(g),y=
+

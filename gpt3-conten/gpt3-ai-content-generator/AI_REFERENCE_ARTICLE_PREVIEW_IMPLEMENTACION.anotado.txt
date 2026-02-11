@@ -1,0 +1,354 @@
+AI REFERENCE - ARTICLE PREVIEW (IMPLEMENTACION + HTML REPLICABLE)
+Generado: 2026-02-10
+
+OBJETIVO
+Este documento explica como funciona el card de Article Preview, que codigo usa (backend + JS), y una estructura HTML lista para replicar.
+
+NOTA DE CONTEXTO
+En este workspace hay referencias .txt/.anotado. Si no estan las fuentes completas PHP/JS del plugin original, usa este documento como contrato tecnico para implementar la misma UX.
+
+============================================================
+1) FLUJO TECNICO (END-TO-END)
+============================================================
+
+1. El usuario pulsa "Generate preview".
+2. El frontend abre un stream SSE (EventSource) al endpoint AJAX.
+3. El backend emite eventos de estado/progreso.
+4. El frontend renderiza HTML incremental en el card preview.
+5. El backend guarda un payload temporal (preview_token).
+6. El usuario puede crear el post final desde el preview (draft/publish/schedule).
+
+Eventos SSE recomendados:
+- preview_start
+- text_progress
+- word_count
+- featured_image_status
+- seo_payload
+- preview_done
+- preview_error
+
+============================================================
+2) ENDPOINTS / HANDLERS A USAR
+============================================================
+
+Hooks AJAX (patron):
+- cbia_preview_article
+- cbia_preview_article_stream
+- cbia_create_post_from_preview
+
+Handlers (patron):
+- cbia_ajax_preview_article
+- cbia_ajax_preview_article_stream
+- cbia_ajax_create_post_from_preview
+- cbia_sse_emit
+
+Contrato de salida:
+- Stream: text/event-stream con eventos SSE.
+- Fallback: preview clasico por JSON si el stream falla.
+- Create post: recibe preview_token + html/titulo/estado/fecha.
+
+============================================================
+3) CODIGO BACKEND (WORDPRESS SSE)
+============================================================
+
+3.1 Emisor SSE
+
+```php
+function cbia_sse_emit($event, array $payload) {
+    echo 'event: ' . preg_replace('/[^a-zA-Z0-9_\-]/', '', (string)$event) . "\n";
+    echo 'data: ' . wp_json_encode($payload) . "\n\n";
+    while (ob_get_level() > 0) { @ob_end_flush(); }
+    @flush();
+}
+```
+
+3.2 Endpoint stream
+
+```php
+add_action('wp_ajax_cbia_preview_article_stream', function () {
+    nocache_headers();
+    header('Content-Type: text/event-stream; charset=utf-8');
+    header('Cache-Control: no-cache, no-transform');
+    header('X-Accel-Buffering: no');
+
+    cbia_sse_emit('preview_start', ['message' => 'Iniciando preview...']);
+
+    // Ejemplo de progreso por fases
+    cbia_sse_emit('text_progress', [
+        'html' => '<h2>Seccion 1</h2><p>Primer bloque...</p>',
+        'word_count' => 120,
+    ]);
+
+    cbia_sse_emit('word_count', ['count' => 120]);
+
+    cbia_sse_emit('featured_image_status', [
+        'status' => 'pending',
+        'message' => 'Generando imagen destacada...'
+    ]);
+
+    cbia_sse_emit('seo_payload', [
+        'excerpt' => 'Resumen breve...',
+        'tags' => ['tag-1', 'tag-2'],
+        'focus_keyphrase' => 'keyword principal',
+        'meta_description' => 'Meta description...'
+    ]);
+
+    cbia_sse_emit('preview_done', ['ok' => 1, 'preview_token' => 'TOKEN_TEMPORAL']);
+    exit;
+});
+```
+
+3.3 Fallback clasico (cuando EventSource falle)
+
+```php
+add_action('wp_ajax_cbia_preview_article', function () {
+    wp_send_json_success([
+        'html' => '<h2>Preview completo</h2><p>Contenido final...</p>',
+        'word_count' => 980,
+        'preview_token' => 'TOKEN_TEMPORAL',
+        'seo' => [
+            'excerpt' => 'Resumen...',
+            'tags' => ['a','b'],
+            'focus_keyphrase' => 'x',
+            'meta_description' => 'y'
+        ]
+    ]);
+});
+```
+
+============================================================
+4) CODIGO FRONTEND (JS CARD PREVIEW)
+============================================================
+
+4.1 Stream principal + fallback
+
+```js
+async function runPreviewStream({ ajaxUrl, params, onDone, onError }) {
+  const streamUrl = `${ajaxUrl}?${new URLSearchParams(params).toString()}`;
+  const es = new EventSource(streamUrl);
+
+  es.addEventListener('preview_start', (evt) => {
+    const data = JSON.parse(evt.data || '{}');
+    setStatus(data.message || 'Iniciando...');
+  });
+
+  es.addEventListener('text_progress', (evt) => {
+    const data = JSON.parse(evt.data || '{}');
+    if (data.html) document.querySelector('#cbia-preview-content').innerHTML = data.html;
+    if (typeof data.word_count !== 'undefined') {
+      document.querySelector('#cbia-preview-wordcount').textContent = `${Number(data.word_count || 0)} words`;
+    }
+  });
+
+  es.addEventListener('word_count', (evt) => {
+    const data = JSON.parse(evt.data || '{}');
+    document.querySelector('#cbia-preview-wordcount').textContent = `${Number(data.count || 0)} words`;
+  });
+
+  es.addEventListener('featured_image_status', (evt) => {
+    const data = JSON.parse(evt.data || '{}');
+    const wrap = document.querySelector('#cbia-featured-image-wrap');
+    if (data.status === 'pending') wrap.dataset.state = 'pending';
+    if (data.status === 'done' && data.url) {
+      wrap.innerHTML = `<img src="${data.url}" alt="Featured">`;
+      wrap.dataset.state = 'done';
+    }
+    if (data.status === 'error') wrap.dataset.state = 'error';
+  });
+
+  es.addEventListener('seo_payload', (evt) => {
+    const data = JSON.parse(evt.data || '{}');
+    document.querySelector('#cbia-seo-excerpt').textContent = data.excerpt || '';
+    document.querySelector('#cbia-seo-tags').textContent = (data.tags || []).join(', ');
+    document.querySelector('#cbia-seo-focus').textContent = data.focus_keyphrase || '';
+    document.querySelector('#cbia-seo-meta').textContent = data.meta_description || '';
+  });
+
+  es.addEventListener('preview_done', (evt) => {
+    const data = JSON.parse(evt.data || '{}');
+    if (data.preview_token) {
+      document.querySelector('#cbia-preview-token').value = data.preview_token;
+    }
+    es.close();
+    onDone?.(data);
+  });
+
+  es.addEventListener('preview_error', (evt) => {
+    const data = JSON.parse(evt.data || '{}');
+    es.close();
+    onError?.(new Error(data.message || 'preview_error'));
+  });
+
+  es.onerror = () => {
+    es.close();
+    onError?.(new Error('EventSource error'));
+  };
+}
+
+async function runPreviewClassic({ ajaxUrl, body }) {
+  const res = await fetch(ajaxUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
+    body: new URLSearchParams(body).toString(),
+  });
+  return res.json();
+}
+```
+
+4.2 Click handler recomendado
+
+```js
+document.querySelector('#cbia_btn_open_preview_modal')?.addEventListener('click', async () => {
+  const btn = document.querySelector('#cbia_btn_open_preview_modal');
+  btn.disabled = true;
+  try {
+    await runPreviewStream({
+      ajaxUrl: window.ajaxurl,
+      params: {
+        action: 'cbia_preview_article_stream',
+        _ajax_nonce: window.cbiaNonce,
+      },
+      onDone: () => setStatus('Preview listo'),
+      onError: async () => {
+        setStatus('Stream fallo, usando fallback...');
+        const json = await runPreviewClassic({
+          ajaxUrl: window.ajaxurl,
+          body: {
+            action: 'cbia_preview_article',
+            _ajax_nonce: window.cbiaNonce,
+          },
+        });
+        if (json?.success) {
+          document.querySelector('#cbia-preview-content').innerHTML = json.data.html || '';
+          document.querySelector('#cbia-preview-wordcount').textContent = `${Number(json.data.word_count || 0)} words`;
+          document.querySelector('#cbia-preview-token').value = json.data.preview_token || '';
+        }
+      },
+    });
+  } finally {
+    btn.disabled = false;
+  }
+});
+```
+
+============================================================
+5) ESTRUCTURA HTML REPLICABLE (CARD PREVIEW)
+============================================================
+
+Usa estos IDs para que el JS anterior funcione sin cambios:
+
+```html
+<section id="cbia-preview-panel" class="cbia-preview-card" aria-live="polite" data-open="false">
+  <header class="cbia-preview-header">
+    <div class="cbia-preview-title-wrap">
+      <h3 class="cbia-preview-title">ARTICLE PREVIEW</h3>
+      <span id="cbia-preview-wordcount" class="cbia-wordcount">0 words</span>
+    </div>
+    <button id="cbia_btn_open_preview_modal" type="button" class="button button-primary">
+      Generacion con previsualizacion
+    </button>
+  </header>
+
+  <div class="cbia-preview-body">
+    <aside class="cbia-preview-media">
+      <div id="cbia-featured-image-wrap" class="cbia-featured-image" data-state="idle">
+        <div class="cbia-image-placeholder">Featured image preview</div>
+      </div>
+      <input id="cbia-preview-token" type="hidden" value="">
+    </aside>
+
+    <main class="cbia-preview-main">
+      <div id="cbia-preview-status" class="cbia-status">Esperando generacion...</div>
+      <article id="cbia-preview-content" class="cbia-preview-content"></article>
+    </main>
+  </div>
+
+  <section class="cbia-seo-card" aria-label="SEO and metadata">
+    <h4>SEO &amp; METADATA</h4>
+    <p><strong>Excerpt:</strong> <span id="cbia-seo-excerpt"></span></p>
+    <p><strong>Tags:</strong> <span id="cbia-seo-tags"></span></p>
+    <p><strong>Focus:</strong> <span id="cbia-seo-focus"></span></p>
+    <p><strong>Meta description:</strong> <span id="cbia-seo-meta"></span></p>
+  </section>
+
+  <footer class="cbia-preview-actions">
+    <button id="cbia-create-draft" type="button" class="button">Guardar borrador</button>
+    <button id="cbia-create-publish" type="button" class="button button-primary">Publicar</button>
+    <button id="cbia-create-schedule" type="button" class="button">Programar</button>
+  </footer>
+</section>
+```
+
+============================================================
+6) MINIMO CSS ESTRUCTURAL
+============================================================
+
+```css
+.cbia-preview-card { border:1px solid #dcdfe4; border-radius:10px; background:#fff; overflow:hidden; }
+.cbia-preview-header { display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid #eceff3; }
+.cbia-preview-title-wrap { display:flex; gap:10px; align-items:center; }
+.cbia-wordcount { font-size:12px; color:#5f6b7a; }
+.cbia-preview-body { display:grid; grid-template-columns: 300px 1fr; gap:16px; padding:14px; }
+.cbia-featured-image { min-height:180px; border:1px dashed #c7d0db; border-radius:8px; display:flex; align-items:center; justify-content:center; }
+.cbia-featured-image img { width:100%; height:auto; display:block; border-radius:8px; }
+.cbia-preview-content h2, .cbia-preview-content h3 { margin: 0 0 10px; }
+.cbia-preview-content p { margin: 0 0 12px; line-height:1.6; }
+.cbia-seo-card { border-top:1px solid #eceff3; padding:12px 14px; background:#fafbfc; }
+.cbia-preview-actions { display:flex; gap:8px; justify-content:flex-end; padding:12px 14px; border-top:1px solid #eceff3; }
+@media (max-width: 980px) { .cbia-preview-body { grid-template-columns:1fr; } }
+```
+
+============================================================
+7) CREAR POST DESDE PREVIEW (CON TOKEN)
+============================================================
+
+```php
+add_action('wp_ajax_cbia_create_post_from_preview', function () {
+    $token = sanitize_text_field($_POST['preview_token'] ?? '');
+    if (!$token) {
+        wp_send_json_error(['message' => 'preview_token vacio'], 400);
+    }
+
+    // Recuperar payload temporal asociado al token
+    $payload = get_transient('cbia_preview_' . $token);
+    if (!is_array($payload)) {
+        wp_send_json_error(['message' => 'preview expirado o invalido'], 410);
+    }
+
+    $post_id = wp_insert_post([
+        'post_title'   => wp_strip_all_tags($_POST['title'] ?? $payload['title'] ?? 'Sin titulo'),
+        'post_content' => wp_kses_post($_POST['html'] ?? $payload['html'] ?? ''),
+        'post_status'  => sanitize_key($_POST['status'] ?? 'draft'),
+        'post_type'    => 'post',
+    ], true);
+
+    if (is_wp_error($post_id)) {
+        wp_send_json_error(['message' => $post_id->get_error_message()], 500);
+    }
+
+    wp_send_json_success(['post_id' => (int)$post_id]);
+});
+```
+
+============================================================
+8) POR QUE SE QUEDA PILLADO (CHECKLIST)
+============================================================
+
+1. El stream no emite `preview_done` ni `preview_error`.
+2. `EventSource` falla por URL demasiado larga (query GET enorme).
+3. Buffering de servidor/proxy (falta `X-Accel-Buffering: no` + flush efectivo).
+4. Nonce/action incorrectos en AJAX.
+5. Frontend no cierra stream en error y deja boton bloqueado.
+6. Fallback clasico no se ejecuta cuando falla stream.
+
+============================================================
+9) IMPLEMENTACION RECOMENDADA
+============================================================
+
+- Mantener 2 rutas siempre: stream + fallback.
+- Guardar preview_token temporal para crear post sin regenerar.
+- Render incremental por bloques HTML.
+- Mostrar estado de featured image y metadata en card separada.
+- No depender de modal: card inline con apertura controlada.
+
+FIN
