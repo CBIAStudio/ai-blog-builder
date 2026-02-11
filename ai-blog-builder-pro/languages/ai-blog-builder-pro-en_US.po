@@ -1,0 +1,209 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: AI Blog Builder Pro 3.0.2\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-02-07 14:56+01:00\n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: en_US\n"
+
+msgid "Configuracion guardada correctamente."
+msgstr "Configuration saved successfully."
+
+msgid "DeepSeek error: {$err}"
+msgstr "DeepSeek error: {$err}"
+
+msgid "DeepSeek HTTP error: "
+msgstr "DeepSeek HTTP error: "
+
+msgid "DeepSeek OK: modelo={$model} tokens_in="
+msgstr "DeepSeek OK: model={$model} tokens_in="
+
+msgid "DeepSeek: modelo={$model} intento {$t}/{$tries}"
+msgstr "DeepSeek: model={$model} attempt {$t}/{$tries}"
+
+msgid "DeepSeek: respuesta sin texto (modelo={$model})"
+msgstr "DeepSeek: no text response (model={$model})"
+
+msgid "El post '{$title}' ya existe. Omitido."
+msgstr "Post '{$title}' already exists. Skipped."
+
+msgid "Error creando categorÃ­a '{$cat_name}': "
+msgstr "Error creating category '{$cat_name}': "
+
+msgid "Fallo texto '{$title}': "
+msgstr "Text failed for '{$title}': "
+
+msgid "FAQ Yoast: {$faq_block_status}"
+msgstr "Yoast FAQ: {$faq_block_status}"
+
+msgid "FAQ Yoast: bloque insertado correctamente"
+msgstr "Yoast FAQ: block inserted successfully"
+
+msgid "Google Gemini error: {$err}"
+msgstr "Google Gemini error: {$err}"
+
+msgid "Google Gemini HTTP error: "
+msgstr "Google Gemini HTTP error: "
+
+msgid "Google Gemini OK: modelo={$model} tokens_in="
+msgstr "Google Gemini OK: model={$model} tokens_in="
+
+msgid "Google Gemini: modelo={$model} intento {$t}/{$tries}"
+msgstr "Google Gemini: model={$model} attempt {$t}/{$tries}"
+
+msgid "Google Gemini: respuesta invalida"
+msgstr "Google Gemini: invalid response"
+
+msgid "Google Gemini: respuesta sin texto (modelo={$model})"
+msgstr "Google Gemini: no text response (model={$model})"
+
+msgid "HTTP error: {$err}"
+msgstr "HTTP error: {$err}"
+
+msgid "Imagen destacada OK: attach_id={$featured_attach_id}"
+msgstr "Featured image OK: attach_id={$featured_attach_id}"
+
+msgid "Imagen IA error HTTP {$code}"
+msgstr "AI image HTTP error {$code}"
+
+msgid "Imagen IA error payload: "
+msgstr "AI image error payload: "
+
+msgid "Imagen IA HTTP error: "
+msgstr "AI image HTTP error: "
+
+msgid "Imagen IA OK: secciÃ³n={$section_label} attach_id={$attach_id}"
+msgstr "AI image OK: section={$section_label} attach_id={$attach_id}"
+
+msgid "Imagen IA OK: seccion={$section_label} attach_id={$attach_id}"
+msgstr "AI image OK: section={$section_label} attach_id={$attach_id}"
+
+msgid "Imagen IA: fallo subiendo a Media Library: {$uerr}"
+msgstr "AI image: failed uploading to Media Library: {$uerr}"
+
+msgid "Imagen IA: modelo={$model} secciÃ³n={$section_label} intento {$t}/{$tries}"
+msgstr "AI image: model={$model} section={$section_label} attempt {$t}/{$tries}"
+
+msgid "Imagen IA: modelo={$model} seccion={$section_label} intento {$t}/{$tries}"
+msgstr "AI image: model={$model} section={$section_label} attempt {$t}/{$tries}"
+
+msgid "Imagen IA: respuesta sin bytes (modelo={$model})"
+msgstr "AI image: response without bytes (model={$model})"
+
+msgid "Imagen insertada OK en contenido: seccion={$section_label}"
+msgstr "Image inserted OK in content: section={$section_label}"
+
+msgid "Imagen pendiente en contenido: seccion={$section_label} err="
+msgstr "Pending image in content: section={$section_label} err="
+
+msgid "Imagen: SHORT_DESC vacio en marcador, usando titulo como fallback"
+msgstr "Image: SHORT_DESC empty in marker, using title as fallback"
+
+msgid "Imagen: SHORT_DESC vacio, usando fallback por titulo"
+msgstr "Image: SHORT_DESC empty, using title as fallback"
+
+msgid "Imagen: usando override de prompt (%s%s)"
+msgstr "Image: using prompt override (%s%s)"
+
+msgid "Marcadores detectados: {$total_markers} | internas a generar: {$internal_limit}"
+msgstr "Markers detected: {$total_markers} | internal to generate: {$internal_limit}"
+
+msgid "Marcadores eliminados (limite internas=0)."
+msgstr "Markers removed (internal limit=0)."
+
+msgid "Marcadores sobrantes eliminados: "
+msgstr "Extra markers removed: "
+
+msgid "Marcadores tras autoinsercion: {$total_markers}"
+msgstr "Markers after auto-insertion: {$total_markers}"
+
+msgid "No se pudo cargar la pestaÃ±a: %s"
+msgstr "Could not load tab: %s"
+
+msgid "No se pudo crear post '{$title}': {$post_err}"
+msgstr "Could not create post '{$title}': {$post_err}"
+
+msgid "No se pudo generar destacada para '{$title}': "
+msgstr "Could not generate featured image for '{$title}': "
+
+msgid "OpenAI error payload: {$err}"
+msgstr "OpenAI error payload: {$err}"
+
+msgid "OpenAI error: {$err}"
+msgstr "OpenAI error: {$err}"
+
+msgid "OpenAI Responses OK: modelo={$model} tokens_in="
+msgstr "OpenAI Responses OK: model={$model} tokens_in="
+
+msgid "OpenAI Responses: modelo={$model} intento {$t}/{$tries} "
+msgstr "OpenAI Responses: model={$model} attempt {$t}/{$tries} "
+
+msgid "Pendientes: destacada creada en post {$post_id} (attach_id={$attach_id})"
+msgstr "Pending: featured created in post {$post_id} (attach_id={$attach_id})"
+
+msgid "Pendientes: fallo destacada post {$post_id}: "
+msgstr "Pending: featured failed for post {$post_id}: "
+
+msgid "Pendientes: fallo generando imagen post {$post_id}: "
+msgstr "Pending: failed generating image for post {$post_id}: "
+
+msgid "Pendientes: imagen insertada post {$post_id} attach_id={$attach_id}"
+msgstr "Pending: image inserted post {$post_id} attach_id={$attach_id}"
+
+msgid "Pendientes: post {$post_id} rellenadas={$filled} restantes={$left_count}"
+msgstr "Pending: post {$post_id} filled={$filled} remaining={$left_count}"
+
+msgid "Pendientes: SHORT_DESC vacio, usando titulo"
+msgstr "Pending: SHORT_DESC empty, using title"
+
+msgid "Post creado OK: ID {$post_id} | '{$title}'"
+msgstr "Post created OK: ID {$post_id} | '{$title}'"
+
+msgid "Preset aplicado en Config: %s"
+msgstr "Preset applied in Config: %s"
+
+msgid "Provider activo \"%s\" aun no soportado para imagenes. Usando OpenAI como fallback."
+msgstr "Active provider \"%s\" not yet supported for images. Using OpenAI as fallback."
+
+msgid "Regenerar imagen: destacada OK post {$post_id} attach_id={$attach_id}"
+msgstr "Regenerate image: featured OK post {$post_id} attach_id={$attach_id}"
+
+msgid "Regenerar imagen: fallo post {$post_id} ({$type} {$idx}): "
+msgstr "Regenerate image: failure post {$post_id} ({$type} {$idx}): "
+
+msgid "Regenerar imagen: interna OK post {$post_id} idx={$idx} attach_id={$attach_id}"
+msgstr "Regenerate image: internal OK post {$post_id} idx={$idx} attach_id={$attach_id}"
+
+msgid "Rellenar pendientes: buscando posts (limit={$limit_posts})"
+msgstr "Fill pending: searching posts (limit={$limit_posts})"
+
+msgid "Rellenar pendientes: finalizado total_rellenadas={$total_filled}"
+msgstr "Fill pending: finished total_filled={$total_filled}"
+
+msgid "Rellenar pendientes: no hay posts con pendientes."
+msgstr "Fill pending: no posts with pending images."
+
+msgid "Rellenar pendientes: post {$pid} pendientes={$pend}"
+msgstr "Fill pending: post {$pid} pending={$pend}"
+
+msgid "Respuesta sin texto (modelo={$model})"
+msgstr "No text response (model={$model})"
+
+msgid "STOP durante imagenes en '{$title}'."
+msgstr "STOP during images in '{$title}'."
+
+msgid "Sync modelos fallo provider={$provider} err="
+msgstr "Model sync failed provider={$provider} err="
+
+msgid "Sync modelos OK provider={$provider} count="
+msgstr "Model sync OK provider={$provider} count="
+
+msgid "Texto IA OK: generado HTML para '{$title}'"
+msgstr "AI text OK: generated HTML for '{$title}'"
+
+
+
+
