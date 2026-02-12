@@ -313,7 +313,7 @@ Activar CRON hourly para rellenar imagenes pendientes
 <p style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
 <button type="submit" class="button" name="cbia_action" value="test_config">Probar configuracion</button>
 
-<button type="button" class="button button-primary" id="cbia_btn_generate">Crear Blogs (con reanudacion)</button>
+  <button type="button" class="button button-primary" id="cbia_btn_generate" onclick="if(window.cbiaStartGeneration){window.cbiaStartGeneration();} return false;">Crear Blogs (con reanudacion)</button>
 <button type="button" class="button" id="cbia_btn_open_preview_modal">Generacion con previsualizacion</button>
 
 <button type="submit" class="button" name="cbia_action" value="stop_generation" style="background:#b70000;color:#fff;border-color:#7a0000;">Detener (STOP)</button>
@@ -352,7 +352,7 @@ Activar CRON hourly para rellenar imagenes pendientes
 </header>
 
 <div class="cbia-preview-controls">
-<button type="button" class="button button-primary" id="cbia_btn_preview">Generar preview</button>
+<button type="button" class="button button-primary" id="cbia_btn_preview" onclick="if(window.cbiaStartPreview){window.cbiaStartPreview();} return false;">Generar preview</button>
 </div>
 
 <div class="cbia-preview-body">
@@ -502,8 +502,9 @@ Activar CRON hourly para rellenar imagenes pendientes
     refreshCheckpoint();
 
     const btn = document.getElementById('cbia_btn_generate');
-    if(btn){
-        btn.addEventListener('click', function(){
+    function startGeneration(){
+        if (!btn) return;
+        if (btn.disabled) return;
             btn.disabled = true;
             const old = btn.textContent;
             btn.textContent = 'Lanzando...';
@@ -527,8 +528,11 @@ Activar CRON hourly para rellenar imagenes pendientes
             .catch(() => {
                 btn.disabled=false; btn.textContent=old;
             });
-        });
     }
+    if(btn){
+        btn.addEventListener('click', startGeneration);
+    }
+    window.cbiaStartGeneration = startGeneration;
 
     const previewOpenBtn = document.getElementById('cbia_btn_open_preview_modal');
     const previewBtn = document.getElementById('cbia_btn_preview');
@@ -575,6 +579,11 @@ Activar CRON hourly para rellenar imagenes pendientes
     let progressiveLastHtml = '';
     let previewExpanded = false;
     let progressiveMode = 'stream';
+
+    if (previewBtn) {
+        previewBtn.disabled = false;
+        previewBtn.removeAttribute('disabled');
+    }
 
     function setPreviewStatus(msg, isError){
         if (!previewStatus) return;
@@ -1263,6 +1272,7 @@ Activar CRON hourly para rellenar imagenes pendientes
         })
         .finally(() => { if (previewBtn) previewBtn.disabled = false; });
     }
+    window.cbiaStartPreview = startPreview;
 
     if (previewOpenBtn) {
         previewOpenBtn.addEventListener('click', function(evt){
