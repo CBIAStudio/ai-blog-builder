@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Bootstrap for the 3.0 structure.
  */
@@ -50,9 +50,8 @@ $cbia_new_files = array(
     CBIA_INCLUDES_DIR . 'jobs/scheduler.php',
 );
 
-foreach ($cbia_new_files as $cbia_file) {
-    if (file_exists($cbia_file)) {
-        require_once $cbia_file;
+foreach ($cbia_new_files as $f) {
+    if (file_exists($f)) {
+        require_once $f;
     }
 }
-

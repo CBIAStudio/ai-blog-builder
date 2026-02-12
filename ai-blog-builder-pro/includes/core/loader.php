@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * CBIA Loader (v2.3 scaffolding)
  *
@@ -28,4 +28,3 @@ if (!class_exists('CBIA_Loader')) {
         }
     }
 }
-

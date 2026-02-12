@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Simple container to share instances.
  */
@@ -18,5 +18,4 @@ if (!class_exists('CBIA_Container')) {
         }
     }
 }
-
 

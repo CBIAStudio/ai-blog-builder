@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Wiring for the 2.3 structure (safe, no behavior change yet).
  */
@@ -104,4 +104,3 @@ if (!function_exists('cbia_container')) {
         return $container;
     }
 }
-

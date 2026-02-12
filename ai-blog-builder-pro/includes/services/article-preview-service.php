@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Article preview service (no post creation).
  */
@@ -21,7 +21,13 @@ if (!class_exists('CBIA_Article_Preview_Service')) {
             try {
             $title = trim((string)($payload['title'] ?? ''));
             if ($title === '') {
+                if (function_exists('cbia_log')) {
+                    cbia_log('[PREVIEW] Titulo vacio.', 'WARN');
+                }
                 return new WP_Error('missing_title', 'Debes indicar un titulo para previsualizar.');
+            }
+            if (function_exists('cbia_log')) {
+                cbia_log("[PREVIEW] Generando preview para '{$title}'.", 'INFO');
             }
             $this->emit($emit, 'cbia_status', array('message' => 'Preparando prompt...'));
 
@@ -33,9 +39,8 @@ if (!class_exists('CBIA_Article_Preview_Service')) {
                 'preview_mode' => $preview_mode,
             ));
 
-            $images_limit = isset($payload['images_limit']) ? (int)$payload['images_limit'] : (int)($settings['images_limit'] ?? 3);
-            if ($images_limit < 1) $images_limit = 1;
-            if ($images_limit > 4) $images_limit = 4;
+            // Normal: only featured image (no in-content)
+            $images_limit = 1;
             $user_id = get_current_user_id();
             $cleanup_warnings = $this->cleanup_previous_preview_media($user_id);
 
@@ -59,24 +64,39 @@ if (!class_exists('CBIA_Article_Preview_Service')) {
             }
 
             $this->emit($emit, 'cbia_status', array('message' => 'Generando contenido...'));
+            if (function_exists('cbia_log')) {
+                cbia_log("[PREVIEW] Generando contenido '{$title}'.", 'INFO');
+            }
 
             if (!function_exists('cbia_create_single_blog_post')) {
+                if (function_exists('cbia_log')) {
+                    cbia_log('[PREVIEW] Motor de creacion no disponible.', 'ERROR');
+                }
                 return new WP_Error('preview_engine_missing', 'Motor de creacion no disponible.');
             }
 
             $create = cbia_create_single_blog_post($title, '', 'draft');
             if (!is_array($create) || empty($create['ok'])) {
                 $err = is_array($create) ? (string)($create['error'] ?? '') : '';
+                if (function_exists('cbia_log')) {
+                    cbia_log("[PREVIEW] Error generando '{$title}': " . ($err !== '' ? $err : 'desconocido'), 'ERROR');
+                }
                 return new WP_Error('preview_generation_failed', $err !== '' ? $err : 'No se pudo generar la previsualizacion.');
             }
 
             $draft_id = (int)($create['post_id'] ?? 0);
             if (!$draft_id) {
+                if (function_exists('cbia_log')) {
+                    cbia_log("[PREVIEW] No se pudo crear borrador para '{$title}'.", 'ERROR');
+                }
                 return new WP_Error('preview_generation_failed', 'No se pudo crear el borrador del preview.');
             }
 
             $post = get_post($draft_id);
             if (!$post) {
+                if (function_exists('cbia_log')) {
+                    cbia_log("[PREVIEW] No se pudo recuperar borrador (ID {$draft_id}).", 'ERROR');
+                }
                 return new WP_Error('preview_generation_failed', 'No se pudo recuperar el borrador generado.');
             }
 
@@ -91,6 +111,9 @@ if (!class_exists('CBIA_Article_Preview_Service')) {
             }
 
             $this->emit($emit, 'cbia_status', array('message' => 'Renderizando imagenes del preview...'));
+            if (function_exists('cbia_log')) {
+                cbia_log("[PREVIEW] Renderizando imagen destacada '{$title}'.", 'INFO');
+            }
             $this->emit($emit, 'featured_image_status', array(
                 'status' => 'pending',
                 'message' => 'Generando imagen destacada...',
@@ -99,12 +122,18 @@ if (!class_exists('CBIA_Article_Preview_Service')) {
             $featured_attach_id = (int)get_post_thumbnail_id($draft_id);
             $featured_url = $featured_attach_id ? wp_get_attachment_url($featured_attach_id) : '';
             if ($featured_url) {
+                if (function_exists('cbia_log')) {
+                    cbia_log("[PREVIEW] Imagen destacada OK '{$title}'.", 'INFO');
+                }
                 $this->emit($emit, 'featured_image_status', array(
                     'status' => 'done',
                     'url' => (string)$featured_url,
                     'message' => 'Imagen destacada lista.',
                 ));
             } else {
+                if (function_exists('cbia_log')) {
+                    cbia_log("[PREVIEW] Imagen destacada no disponible '{$title}'.", 'WARN');
+                }
                 $this->emit($emit, 'featured_image_status', array(
                     'status' => 'error',
                     'message' => 'No se pudo generar imagen destacada.',
@@ -113,6 +142,9 @@ if (!class_exists('CBIA_Article_Preview_Service')) {
 
             $this->emit($emit, 'cbia_content', array('html' => $display_html));
             $this->emit($emit, 'cbia_status', array('message' => 'Calculando metadatos...'));
+            if (function_exists('cbia_log')) {
+                cbia_log("[PREVIEW] Calculando metadatos '{$title}'.", 'INFO');
+            }
 
             $excerpt = wp_trim_words(wp_strip_all_tags($final_html), 35, '...');
             $meta = (string)get_post_meta($draft_id, '_yoast_wpseo_metadesc', true);
@@ -170,6 +202,9 @@ if (!class_exists('CBIA_Article_Preview_Service')) {
                 'usage' => array(),
             );
             } finally {
+                if (function_exists('cbia_log')) {
+                    cbia_log('[PREVIEW] Fin de proceso de preview.', 'INFO');
+                }
                 $GLOBALS['cbia_ignore_stop'] = $prev_ignore_stop;
             }
         }

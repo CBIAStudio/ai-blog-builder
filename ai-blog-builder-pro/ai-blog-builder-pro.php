@@ -1,74 +1,39 @@
-﻿<?php
+<?php
 /**
  * Plugin Name: AI Blog Builder Pro
- * Description: Version Pro de AI Blog Builder (requiere la version gratuita activa).
- * Version: 3.0.4
+ * Description: Version PRO de AI Blog Builder.
+ * Version: 1.1.0
  *
  * Author: CBIA Studio
  * Requires at least: 6.9
  * Requires PHP: 8.2
- * Requires Plugins: ai-blog-builder
  * License: GPLv2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  */
 
 if (!defined('ABSPATH')) exit;
 
-if (!defined('CBIA_PRO_VERSION')) define('CBIA_PRO_VERSION', '3.0.4');
+if (!defined('CBIA_VERSION')) define('CBIA_VERSION', '1.1.0');
+if (!defined('CBIA_PLUGIN_FILE')) define('CBIA_PLUGIN_FILE', __FILE__);
+if (!defined('CBIA_PLUGIN_DIR')) define('CBIA_PLUGIN_DIR', plugin_dir_path(__FILE__));
+if (!defined('CBIA_PLUGIN_URL')) define('CBIA_PLUGIN_URL', plugin_dir_url(__FILE__));
+
 if (!defined('CBIA_PRO_PLUGIN_FILE')) define('CBIA_PRO_PLUGIN_FILE', __FILE__);
 if (!defined('CBIA_PRO_PLUGIN_DIR')) define('CBIA_PRO_PLUGIN_DIR', plugin_dir_path(__FILE__));
 if (!defined('CBIA_PRO_PLUGIN_URL')) define('CBIA_PRO_PLUGIN_URL', plugin_dir_url(__FILE__));
-if (!defined('CBIA_PRO_INCLUDES_DIR')) define('CBIA_PRO_INCLUDES_DIR', CBIA_PRO_PLUGIN_DIR . 'includes/');
 
-// Compatibilidad con constantes base usadas por el core actual
-if (!defined('CBIA_VERSION')) define('CBIA_VERSION', CBIA_PRO_VERSION);
-if (!defined('CBIA_PLUGIN_FILE')) define('CBIA_PLUGIN_FILE', CBIA_PRO_PLUGIN_FILE);
-if (!defined('CBIA_PLUGIN_DIR')) define('CBIA_PLUGIN_DIR', CBIA_PRO_PLUGIN_DIR);
-if (!defined('CBIA_PLUGIN_URL')) define('CBIA_PLUGIN_URL', CBIA_PRO_PLUGIN_URL);
-if (!defined('CBIA_INCLUDES_DIR')) define('CBIA_INCLUDES_DIR', CBIA_PRO_INCLUDES_DIR);
+if (!defined('CBIA_INCLUDES_DIR')) define('CBIA_INCLUDES_DIR', CBIA_PRO_PLUGIN_DIR . 'includes/');
 if (!defined('CBIA_OPTION_SETTINGS')) define('CBIA_OPTION_SETTINGS', 'cbia_settings');
 if (!defined('CBIA_OPTION_LOG')) define('CBIA_OPTION_LOG', 'cbia_activity_log');
 if (!defined('CBIA_OPTION_LOG_COUNTER')) define('CBIA_OPTION_LOG_COUNTER', 'cbia_log_counter');
 if (!defined('CBIA_OPTION_STOP')) define('CBIA_OPTION_STOP', 'cbia_stop_generation');
 if (!defined('CBIA_OPTION_CHECKPOINT')) define('CBIA_OPTION_CHECKPOINT', 'cbia_checkpoint');
 
-// Dependencia: requiere AI Blog Builder (FREE)
-if (!defined('ABB_FREE_PLUGIN')) define('ABB_FREE_PLUGIN', 'ai-blog-builder/ai-blog-builder.php');
-
 // Cargar traducciones
 // Nota: evitamos load_plugin_textdomain() para cumplir con las recomendaciones actuales.
 
-if (!function_exists('cbia_pro_is_free_active')) {
-	function cbia_pro_is_free_active(): bool {
-		if (!function_exists('is_plugin_active')) {
-			require_once ABSPATH . 'wp-admin/includes/plugin.php';
-		}
-		return is_plugin_active(ABB_FREE_PLUGIN);
-	}
-}
-register_activation_hook(__FILE__, function () {
-	if (!cbia_pro_is_free_active()) {
-		deactivate_plugins(plugin_basename(__FILE__));
-		wp_die(
-			'AI Blog Builder Pro requiere que AI Blog Builder (FREE) esté activo. Instálalo y actívalo primero.',
-			'Plugin requerido no activo',
-			array('back_link' => true)
-		);
-	}
-});
-
-if (!cbia_pro_is_free_active()) {
-	add_action('admin_notices', function () {
-		if (!current_user_can('activate_plugins')) return;
-		echo '<div class="notice notice-error"><p>';
-		echo wp_kses_post('<strong>AI Blog Builder Pro:</strong> requiere que <em>AI Blog Builder (FREE)</em> esté activo.');
-		echo '</p></div>';
-	});
-	return;
-}
-
 // Bootstrap nueva estructura (v3.0)
-$cbia_pro_bootstrap = CBIA_PRO_INCLUDES_DIR . 'core/bootstrap.php';
+$cbia_pro_bootstrap = CBIA_INCLUDES_DIR . 'core/bootstrap.php';
 if (file_exists($cbia_pro_bootstrap)) {
 	require_once $cbia_pro_bootstrap;
 }
@@ -114,7 +79,7 @@ if (!function_exists('cbia_log')) {
 		$log = (string) get_option(CBIA_OPTION_LOG, '');
 		$log = $log ? ($log . "\n" . $line) : $line;
 
-		// Mantener el log con un tamaÃ±o razonable (Ãºltimos ~2000 lÃ­neas)
+		// Mantener el log con un tamano razonable (ultimas ~2000 lineas)
 		$lines = explode("\n", $log);
 		if (count($lines) > 2000) {
 			$lines = array_slice($lines, -2000);
@@ -181,25 +146,26 @@ if (!function_exists('cbia_get_default_settings')) {
 			'google_location'       => '',
 			'google_service_account_json' => '',
 
-			// Longitud / imÃ¡genes
+			// Longitud / imagenes
 			'post_length_variant'   => 'medium',
-			'images_limit'          => 3,
+			// Normal: solo imagen destacada
+			'images_limit'          => 1,
 			// CAMBIO: prompt recomendado/legado (compatibilidad)
 			'blog_prompt_mode'      => 'recommended',
 			'blog_prompt_editable'  => '',
 			'legacy_full_prompt'    => '',
-			'prompt_single_all'     => "Escribe un artÃ­culo de blog en HTML (sin <h1>) sobre: {title}\nIncluye marcadores de imagen del tipo [IMAGEN: descripciÃ³n].",
+			'prompt_single_all'     => "Escribe un articulo de blog en HTML (sin <h1>) sobre: {title}\nIncluye marcadores de imagen del tipo [IMAGEN: descripcion].",
 			'prompt_img_intro'      => '',
 			'prompt_img_body'       => '',
 			'prompt_img_conclusion' => '',
 			'prompt_img_faq'        => '',
-			'post_language'         => 'espaÃ±ol',
+			'post_language'         => 'espanol',
 			'responses_max_output_tokens' => 6000,
 			'image_request_delay'   => 2,
 
-			// CategorÃ­as/Tags
+			// Categorias/Tags
 			'default_category'      => 'Noticias',
-			'keywords_to_categories'=> "", // lÃ­neas: "Categoria: kw1, kw2"
+			'keywords_to_categories'=> "", // lineas: "Categoria: kw1, kw2"
 			'default_tags'          => "", // tags permitidas separadas por comas
 
 			// Blog scheduling / cron fill
@@ -247,7 +213,7 @@ if (!function_exists('cbia_update_settings_merge')) {
 }
 
 /**
- * ActivaciÃ³n: asegurar options base
+ * Activacion: asegurar options base
  */
 register_activation_hook(__FILE__, function () {
 	if (get_option(CBIA_OPTION_SETTINGS, null) === null) {
@@ -268,7 +234,7 @@ register_activation_hook(__FILE__, function () {
 });
 
 /**
- * Cargar mÃ³dulos core (sin legacy)
+ * Cargar modulos core (sin legacy)
  */
 if (!function_exists('cbia_pro_load_modules')) {
 	function cbia_pro_load_modules(): void {
@@ -293,11 +259,11 @@ if (function_exists('cbia_register_core_hooks')) {
 }
 
 /**
- * Admin: menÃº + tabs
+ * Admin: menu + tabs
  */
 add_action('admin_menu', function () {
 	if (class_exists('CBIA_Admin_Router')) {
-		// El router nuevo registra su propio menÃº.
+		// El router nuevo registra su propio menu.
 		return;
 	}
 	add_menu_page(
@@ -314,7 +280,7 @@ add_action('admin_menu', function () {
 if (!function_exists('cbia_get_admin_tabs')) {
 	function cbia_get_admin_tabs(): array {
 		return [
-			'config'   => ['label' => 'ConfiguraciÃ³n', 'render' => 'cbia_render_tab_config'],
+			'config'   => ['label' => 'Configuracion', 'render' => 'cbia_render_tab_config'],
 			'blog'     => ['label' => 'Blog',          'render' => 'cbia_render_tab_blog'],
 			'oldposts' => ['label' => 'Actualizar antiguos', 'render' => 'cbia_render_tab_oldposts'],
 			'costes'   => ['label' => 'Costes',        'render' => 'cbia_render_tab_costes'],
@@ -335,7 +301,7 @@ if (!function_exists('cbia_get_current_tab')) {
 if (!function_exists('cbia_render_admin_page')) {
 	function cbia_render_admin_page(): void {
 		if (!current_user_can('manage_options')) {
-			wp_die('No tienes permisos para ver esta pÃ¡gina.');
+			wp_die('No tienes permisos para ver esta pagina.');
 		}
 
 		$tabs = cbia_get_admin_tabs();
@@ -358,14 +324,9 @@ if (!function_exists('cbia_render_admin_page')) {
 		if ($current_tab && isset($current_tab['render']) && is_callable($current_tab['render'])) {
 			call_user_func($current_tab['render']);
 		} else {
-			echo '<p>No se pudo cargar esta pestaÃ±a.</p>';
+			echo '<p>No se pudo cargar esta pestana.</p>';
 		}
 
 		echo '</div>';
 	}
 }
-
-
-
-
-

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /**
  * Core hooks (admin notices, AJAX, assets).
  */
@@ -134,6 +134,7 @@ if (!function_exists('cbia_admin_post_usage_export')) {
         foreach ($rows as $row) {
             fputcsv($out, $row);
         }
+        fclose($out);
         exit;
     }
 }
@@ -165,9 +166,9 @@ if (!function_exists('cbia_admin_notice_yoast')) {
                     self_admin_url('plugins.php?action=activate&plugin=' . rawurlencode($yoast_plugin)),
                     'activate-plugin_' . $yoast_plugin
                 );
-                $msg = 'Yoast SEO estÃƒÂ¡ instalado pero inactivo. <a href="' . esc_url($activate_url) . '">Activar ahora</a>.';
+                $msg = 'Yoast SEO estÃ¡ instalado pero inactivo. <a href="' . esc_url($activate_url) . '">Activar ahora</a>.';
             } else {
-                $msg = 'Yoast SEO estÃƒÂ¡ instalado pero inactivo.';
+                $msg = 'Yoast SEO estÃ¡ instalado pero inactivo.';
             }
             echo '<div class="notice notice-warning is-dismissible"><p>' . wp_kses($msg, ['a' => ['href' => []]]) . '</p></div>';
             return;
@@ -178,9 +179,9 @@ if (!function_exists('cbia_admin_notice_yoast')) {
                 self_admin_url('update.php?action=install-plugin&plugin=wordpress-seo'),
                 'install-plugin_wordpress-seo'
             );
-            $msg = 'Yoast SEO no estÃƒÂ¡ instalado. <a href="' . esc_url($install_url) . '">Instalar Yoast SEO</a>.';
+            $msg = 'Yoast SEO no estÃ¡ instalado. <a href="' . esc_url($install_url) . '">Instalar Yoast SEO</a>.';
         } else {
-            $msg = 'Yoast SEO no estÃƒÂ¡ instalado.';
+            $msg = 'Yoast SEO no estÃ¡ instalado.';
         }
 
         echo '<div class="notice notice-warning is-dismissible"><p>' . wp_kses($msg, ['a' => ['href' => []]]) . '</p></div>';
@@ -229,34 +230,35 @@ if (!function_exists('cbia_admin_enqueue_inline')) {
             ),
         ));
 
-        $js =
-            "(function($){\n" .
-            "  window.CBIA = window.CBIA || {};\n" .
-            "  CBIA.ajaxUrl = \"" . esc_js($ajax_url) . "\";\n" .
-            "  CBIA.nonce = \"" . esc_js($nonce) . "\";\n" .
-            "\n" .
-            "  CBIA.fetchLog = function(targetSelector){\n" .
-            "    return $.post(CBIA.ajaxUrl, {action:'cbia_get_log', _ajax_nonce: CBIA.nonce})\n" .
-            "      .done(function(res){\n" .
-            "        if(res && res.success && res.data){\n" .
-            "          $(targetSelector).val(res.data.log || '');\n" .
-            "        }\n" .
-            "      });\n" .
-            "  };\n" .
-            "\n" .
-            "  CBIA.clearLog = function(targetSelector){\n" .
-            "    return $.post(CBIA.ajaxUrl, {action:'cbia_clear_log', _ajax_nonce: CBIA.nonce})\n" .
-            "      .done(function(res){\n" .
-            "        if(res && res.success){\n" .
-            "          $(targetSelector).val('');\n" .
-            "        }\n" .
-            "      });\n" .
-            "  };\n" .
-            "\n" .
-            "  CBIA.setStop = function(stop){\n" .
-            "    return $.post(CBIA.ajaxUrl, {action:'cbia_set_stop', stop: stop ? 1 : 0, _ajax_nonce: CBIA.nonce});\n" .
-            "  };\n" .
-            "})(jQuery);\n";
+        $js = <<<JS
+(function($){
+  window.CBIA = window.CBIA || {};
+  CBIA.ajaxUrl = "{$ajax_url}";
+  CBIA.nonce = "{$nonce}";
+
+  CBIA.fetchLog = function(targetSelector){
+    return $.post(CBIA.ajaxUrl, {action:'cbia_get_log', _ajax_nonce: CBIA.nonce})
+      .done(function(res){
+        if(res && res.success && res.data){
+          $(targetSelector).val(res.data.log || '');
+        }
+      });
+  };
+
+  CBIA.clearLog = function(targetSelector){
+    return $.post(CBIA.ajaxUrl, {action:'cbia_clear_log', _ajax_nonce: CBIA.nonce})
+      .done(function(res){
+        if(res && res.success){
+          $(targetSelector).val('');
+        }
+      });
+  };
+
+  CBIA.setStop = function(stop){
+    return $.post(CBIA.ajaxUrl, {action:'cbia_set_stop', stop: stop ? 1 : 0, _ajax_nonce: CBIA.nonce});
+  };
+})(jQuery);
+JS;
 
         wp_add_inline_script('jquery', $js, 'after');
     }
@@ -273,7 +275,7 @@ if (!function_exists('cbia_output_banner_css')) {
         $css = trim((string)($settings['content_images_banner_css'] ?? ''));
         if ($css === '') return;
 
-        echo "<style id='cbia-banner-css'>\n" . esc_html($css) . "\n</style>";
+        echo "<style id='cbia-banner-css'>\n" . $css . "\n</style>";
     }
 }
 
@@ -294,7 +296,7 @@ if (!function_exists('cbia_output_banner_css_admin')) {
 
         $css = trim((string)($settings['content_images_banner_css'] ?? ''));
         if ($css === '') return;
-        echo "<style id='cbia-banner-css-admin'>\n" . esc_html($css) . "\n</style>";
+        echo "<style id='cbia-banner-css-admin'>\n" . $css . "\n</style>";
     }
 }
 
@@ -353,7 +355,13 @@ if (!function_exists('cbia_ajax_preview_article_stream')) {
         if (function_exists('ignore_user_abort')) {
             @ignore_user_abort(true);
         }
-        // Nota: evitamos ini_set() para cumplir con recomendaciones del entorno.
+        @ini_set('zlib.output_compression', '0');
+        @ini_set('output_buffering', 'off');
+        @ini_set('implicit_flush', '1');
+        @ini_set('display_errors', '0');
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            @ini_set('log_errors', '1');
+        }
         nocache_headers();
         header('Content-Type: text/event-stream; charset=utf-8');
         header('Cache-Control: no-cache, no-transform');
@@ -532,12 +540,12 @@ if (!function_exists('cbia_ajax_set_stop')) {
         check_ajax_referer('cbia_ajax_nonce');
         if (!current_user_can('manage_options')) wp_send_json_error(['msg' => 'No autorizado'], 403);
 
-        $stop = isset($_POST['stop']) ? absint(wp_unslash($_POST['stop'])) : 0;
+        $stop = isset($_POST['stop']) ? (int) $_POST['stop'] : 0;
         if (function_exists('cbia_set_stop_flag')) {
             cbia_set_stop_flag($stop === 1);
         }
         if (function_exists('cbia_log')) {
-            cbia_log($stop === 1 ? 'Se activÃƒÂ³ STOP (detener generaciÃƒÂ³n).' : 'Se desactivÃƒÂ³ STOP (reanudar).', 'INFO');
+            cbia_log($stop === 1 ? 'Se activÃ³ STOP (detener generaciÃ³n).' : 'Se desactivÃ³ STOP (reanudar).', 'INFO');
         }
         wp_send_json_success(['stop' => $stop === 1 ? 1 : 0]);
     }
@@ -576,12 +584,9 @@ if (!function_exists('cbia_ajax_get_checkpoint_status')) {
 if (!function_exists('cbia_ajax_start_generation')) {
     function cbia_ajax_start_generation() {
         $nonce = '';
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-        if (isset($_REQUEST['_ajax_nonce'])) $nonce = sanitize_text_field(wp_unslash($_REQUEST['_ajax_nonce']));
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-        if ($nonce === '' && isset($_REQUEST['_wpnonce'])) $nonce = sanitize_text_field(wp_unslash($_REQUEST['_wpnonce']));
-        // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-        if ($nonce === '' && isset($_REQUEST['nonce'])) $nonce = sanitize_text_field(wp_unslash($_REQUEST['nonce']));
+        if (isset($_REQUEST['_ajax_nonce'])) $nonce = (string)$_REQUEST['_ajax_nonce'];
+        if ($nonce === '' && isset($_REQUEST['_wpnonce'])) $nonce = (string)$_REQUEST['_wpnonce'];
+        if ($nonce === '' && isset($_REQUEST['nonce'])) $nonce = (string)$_REQUEST['nonce'];
         if ($nonce === '' || !wp_verify_nonce($nonce, 'cbia_ajax_nonce')) {
             wp_send_json_error(['msg' => 'bad_nonce'], 403);
         }
@@ -606,7 +611,7 @@ if (!function_exists('cbia_ajax_start_generation')) {
         // Ejecuta 1 tanda inmediata para que haya log visible.
         $max_per_run = 1;
         if (function_exists('cbia_log_message')) {
-            cbia_log_message('[INFO] START: Ejecutando primera tanda inmediata (para evitar Ã¢â‚¬Å“no hace nadaÃ¢â‚¬Â).');
+            cbia_log_message('[INFO] START: Ejecutando primera tanda inmediata (para evitar â€œno hace nadaâ€).');
         }
         $result = $blog_service
             ? $blog_service->run_generate_blogs($max_per_run)
@@ -677,9 +682,9 @@ if (!function_exists('cbia_ajax_get_img_prompt')) {
         check_ajax_referer('cbia_ajax_nonce');
         if (!current_user_can('manage_options')) wp_send_json_error(['message' => 'No autorizado'], 403);
 
-        $post_id = isset($_POST['post_id']) ? absint(wp_unslash($_POST['post_id'])) : 0;
-        $type = isset($_POST['type']) ? sanitize_key((string)wp_unslash($_POST['type'])) : '';
-        $idx = isset($_POST['idx']) ? absint(wp_unslash($_POST['idx'])) : 0;
+        $post_id = isset($_POST['post_id']) ? (int)$_POST['post_id'] : 0;
+        $type = isset($_POST['type']) ? sanitize_key((string)$_POST['type']) : '';
+        $idx = isset($_POST['idx']) ? (int)$_POST['idx'] : 0;
 
         if ($type !== 'featured' && $type !== 'internal') {
             wp_send_json_error(['message' => 'Parametros invalidos'], 400);
@@ -731,10 +736,10 @@ if (!function_exists('cbia_ajax_save_img_prompt_override')) {
         check_ajax_referer('cbia_ajax_nonce');
         if (!current_user_can('manage_options')) wp_send_json_error(['message' => 'No autorizado'], 403);
 
-        $post_id = isset($_POST['post_id']) ? absint(wp_unslash($_POST['post_id'])) : 0;
-        $type = isset($_POST['type']) ? sanitize_key((string)wp_unslash($_POST['type'])) : '';
-        $idx = isset($_POST['idx']) ? absint(wp_unslash($_POST['idx'])) : 0;
-        $prompt = isset($_POST['prompt']) ? sanitize_textarea_field(wp_unslash((string)$_POST['prompt'])) : '';
+        $post_id = isset($_POST['post_id']) ? (int)$_POST['post_id'] : 0;
+        $type = isset($_POST['type']) ? sanitize_key((string)$_POST['type']) : '';
+        $idx = isset($_POST['idx']) ? (int)$_POST['idx'] : 0;
+        $prompt = isset($_POST['prompt']) ? wp_unslash((string)$_POST['prompt']) : '';
 
         if ($type !== 'featured' && $type !== 'internal') {
             wp_send_json_error(['message' => 'Parametros invalidos'], 400);
@@ -777,9 +782,9 @@ if (!function_exists('cbia_ajax_regen_image')) {
         check_ajax_referer('cbia_ajax_nonce');
         if (!current_user_can('manage_options')) wp_send_json_error(['message' => 'No autorizado'], 403);
 
-        $post_id = isset($_POST['post_id']) ? absint(wp_unslash($_POST['post_id'])) : 0;
-        $type = isset($_POST['type']) ? sanitize_key((string)wp_unslash($_POST['type'])) : '';
-        $idx = isset($_POST['idx']) ? absint(wp_unslash($_POST['idx'])) : 0;
+        $post_id = isset($_POST['post_id']) ? (int)$_POST['post_id'] : 0;
+        $type = isset($_POST['type']) ? sanitize_key((string)$_POST['type']) : '';
+        $idx = isset($_POST['idx']) ? (int)$_POST['idx'] : 0;
 
         if ($post_id <= 0 || ($type !== 'featured' && $type !== 'internal')) {
             wp_send_json_error(['message' => 'Parametros invalidos'], 400);
@@ -822,7 +827,7 @@ if (!function_exists('cbia_ajax_regen_image')) {
 
         list($ok, $attach_id, $model, $err) = cbia_generate_image_openai_with_prompt($prompt, $section, $title, $alt, $idx);
         if (!$ok || !$attach_id) {
-            cbia_log(sprintf('Regenerar imagen: fallo post %1$d (%2$s %3$d): ', (int)$post_id, (string)$type, (int)$idx) . ($err ?: ''), 'ERROR');
+            cbia_log(__("Regenerar imagen: fallo post {$post_id} ({$type} {$idx}): ","ai-blog-builder-pro") . ($err ?: ''), 'ERROR');
             wp_send_json_error(['message' => $err ?: 'No se pudo generar la imagen'], 500);
         }
 
@@ -849,7 +854,7 @@ if (!function_exists('cbia_ajax_regen_image')) {
             $img_descs['featured']['attach_id'] = (int)$attach_id;
             cbia_set_post_image_descs($post_id, $img_descs);
 
-            cbia_log(sprintf('Regenerar imagen: destacada OK post %1$d attach_id=%2$d', (int)$post_id, (int)$attach_id), 'INFO');
+            cbia_log(__("Regenerar imagen: destacada OK post {$post_id} attach_id={$attach_id}","ai-blog-builder-pro"), 'INFO');
             wp_send_json_success(['ok' => 1, 'attach_id' => (int)$attach_id]);
         }
 
@@ -910,7 +915,7 @@ if (!function_exists('cbia_ajax_regen_image')) {
             update_post_meta($post_id, '_cbia_pending_images', (string)count($left));
         }
 
-        cbia_log(sprintf('Regenerar imagen: interna OK post %1$d idx=%2$d attach_id=%3$d', (int)$post_id, (int)$idx, (int)$attach_id), 'INFO');
+        cbia_log(__("Regenerar imagen: interna OK post {$post_id} idx={$idx} attach_id={$attach_id}","ai-blog-builder-pro"), 'INFO');
         wp_send_json_success([
             'ok' => 1,
             'attach_id' => (int)$attach_id,
@@ -924,7 +929,7 @@ if (!function_exists('cbia_ajax_sync_models')) {
         check_ajax_referer('cbia_ajax_nonce');
         if (!current_user_can('manage_options')) wp_send_json_error(['message' => 'No autorizado'], 403);
 
-        $provider = isset($_POST['provider']) ? sanitize_key((string) wp_unslash($_POST['provider'])) : '';
+        $provider = isset($_POST['provider']) ? sanitize_key((string)$_POST['provider']) : '';
         if ($provider === '') {
             if (function_exists('cbia_providers_get_current_provider')) {
                 $provider = cbia_providers_get_current_provider();
@@ -947,16 +952,15 @@ if (!function_exists('cbia_ajax_sync_models')) {
                 }
             }
             if (function_exists('cbia_log')) {
-                cbia_log(sprintf('Sync modelos OK provider=%1$s count=%2$d source=%3$s', (string)$provider, (int)$result['count'], (string)$result['source']), 'INFO');
+                cbia_log(__("Sync modelos OK provider={$provider} count=","ai-blog-builder-pro") . (int)$result['count'] . " source=" . (string)$result['source'], 'INFO');
             }
             wp_send_json_success($result);
         }
 
         if (function_exists('cbia_log')) {
-            cbia_log(sprintf('Sync modelos fallo provider=%1$s err=%2$s', (string)$provider, (string)($result['error'] ?? '')), 'WARN');
+            cbia_log(__("Sync modelos fallo provider={$provider} err=","ai-blog-builder-pro") . (string)($result['error'] ?? ''), 'WARN');
         }
         wp_send_json_error(['message' => 'No se pudo sincronizar', 'result' => $result], 500);
     }
 }
-
 

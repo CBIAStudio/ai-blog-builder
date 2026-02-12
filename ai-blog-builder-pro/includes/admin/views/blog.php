@@ -440,20 +440,39 @@ Activar CRON hourly para rellenar imagenes pendientes
         }
         return String(payload);
     }
+    function dedupeLogLines(text){
+        const raw = String(text || '');
+        if (!raw) return '';
+        const lines = raw.split(/\r?\n/);
+        const seen = new Set();
+        const out = [];
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (!line) continue;
+            if (seen.has(line)) continue;
+            seen.add(line);
+            out.push(line);
+        }
+        return out.join('\n');
+    }
 
     function refreshLog(){
         if (typeof ajaxurl === 'undefined') return;
-        const logUrl = ajaxurl + '?action=cbia_get_log&_ajax_nonce=' + encodeURIComponent(<?php echo wp_json_encode($ajax_nonce); ?>);
-        fetch(logUrl, { credentials:'same-origin' })
+        const logUrl = ajaxurl + '?action=cbia_get_log&_ajax_nonce=' + encodeURIComponent(<?php echo wp_json_encode($ajax_nonce); ?>) + '&ts=' + Date.now();
+        fetch(logUrl, { credentials:'same-origin', cache:'no-store' })
         .then(r => r.text())
         .then(text => {
             if(!logBox) return;
             let data = null;
-            try { data = JSON.parse(text); } catch(e) { return; }
+            try { data = JSON.parse(text); } catch(e) {
+                logBox.value = dedupeLogLines(extractLogText(text));
+                logBox.scrollTop = logBox.scrollHeight;
+                return;
+            }
             if (data && data.success) {
-                logBox.value = extractLogText(data.data);
+                logBox.value = dedupeLogLines(extractLogText(data.data));
             } else {
-                logBox.value = extractLogText(data);
+                logBox.value = dedupeLogLines(extractLogText(data));
             }
             logBox.scrollTop = logBox.scrollHeight;
         })
@@ -548,6 +567,7 @@ Activar CRON hourly para rellenar imagenes pendientes
     const postLanguage = document.querySelector('select[name="post_language"]');
     const imagesLimit = document.querySelector('select[name="images_limit"]');
     let previewToken = '';
+    let previewPostId = 0;
     let previewOriginalHtml = '';
     let previewEdited = false;
     let progressiveQueue = [];
@@ -613,6 +633,80 @@ Activar CRON hourly para rellenar imagenes pendientes
             return '<figure class="cbia-preview-img-ph"><span class="dashicons dashicons-format-image" aria-hidden="true"></span><span class="description">' + (label ? label : 'Imagen en proceso...') + '</span></figure>';
         });
     }
+    let typewriterTimer = null;
+    let typewriterActive = false;
+    function clearTypewriter(){
+        typewriterActive = false;
+        if (typewriterTimer) {
+            clearTimeout(typewriterTimer);
+            typewriterTimer = null;
+        }
+    }
+    function startTypewriter(rawHtml){
+        clearTypewriter();
+        if (!previewHtml) return;
+        const html = processPreviewHtml(rawHtml || '');
+        if (!html) {
+            previewHtml.innerHTML = '';
+            setWordCount(0);
+            return;
+        }
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        const textNodes = [];
+        const cloneNode = function(node){
+            if (node.nodeType === 3) {
+                const tn = document.createTextNode('');
+                textNodes.push({ target: tn, text: node.nodeValue || '' });
+                return tn;
+            }
+            if (node.nodeType !== 1) {
+                return document.createTextNode('');
+            }
+            const el = document.createElement(node.nodeName.toLowerCase());
+            if (node.attributes && node.attributes.length) {
+                Array.prototype.forEach.call(node.attributes, function(attr){
+                    el.setAttribute(attr.name, attr.value);
+                });
+            }
+            Array.prototype.forEach.call(node.childNodes, function(child){
+                el.appendChild(cloneNode(child));
+            });
+            return el;
+        };
+        const frag = document.createDocumentFragment();
+        Array.prototype.forEach.call(temp.childNodes, function(child){
+            frag.appendChild(cloneNode(child));
+        });
+        previewHtml.innerHTML = '';
+        previewHtml.appendChild(frag);
+        typewriterActive = true;
+        let nodeIdx = 0;
+        let charIdx = 0;
+        const speed = 14;
+        const tick = function(){
+            if (!typewriterActive) return;
+            if (nodeIdx >= textNodes.length) {
+                setWordCount(calcWordCountFromHtml(previewHtml.innerHTML || ''));
+                typewriterTimer = null;
+                return;
+            }
+            const current = textNodes[nodeIdx];
+            const text = current.text || '';
+            if (charIdx < text.length) {
+                current.target.nodeValue += text.charAt(charIdx);
+                charIdx++;
+            } else {
+                nodeIdx++;
+                charIdx = 0;
+            }
+            if ((nodeIdx + charIdx) % 20 === 0) {
+                setWordCount(calcWordCountFromHtml(previewHtml.innerHTML || ''));
+            }
+            typewriterTimer = setTimeout(tick, speed);
+        };
+        typewriterTimer = setTimeout(tick, speed);
+    }
     function renderInitialImagePlaceholders(){
         if (!previewHtml) return;
         const count = Number(imagesLimit && imagesLimit.value ? imagesLimit.value : 0);
@@ -627,6 +721,7 @@ Activar CRON hourly para rellenar imagenes pendientes
         previewHtml.innerHTML = html;
     }
     function clearProgressiveQueue(){
+        clearTypewriter();
         progressiveQueue = [];
         progressiveLastHtml = '';
         progressiveMode = 'stream';
@@ -703,14 +798,7 @@ Activar CRON hourly para rellenar imagenes pendientes
         clearProgressiveQueue();
         progressiveMode = 'classic';
         setPreviewModeBadge('classic');
-        const chunks = splitHtmlProgressChunks(finalHtml);
-        if (!chunks.length) {
-            enqueueProgressiveHtml(finalHtml, calcWordCountFromHtml(finalHtml));
-            return;
-        }
-        for (let i = 0; i < chunks.length; i++) {
-            enqueueProgressiveHtml(chunks[i], calcWordCountFromHtml(chunks[i]));
-        }
+        startTypewriter(finalHtml);
     }
     function setPreviewEditMode(enabled){
         if (!previewHtml) return;
@@ -766,7 +854,9 @@ Activar CRON hourly para rellenar imagenes pendientes
         const skipCancel = !!opts.skipCancel;
         const tokenToCancel = previewToken;
         clearProgressiveQueue();
+        clearTypewriter();
         previewToken = '';
+        previewPostId = 0;
         previewOriginalHtml = '';
         previewEdited = false;
         previewEdited = false;
@@ -826,6 +916,7 @@ Activar CRON hourly para rellenar imagenes pendientes
         const skipImmediateHtml = !!opts.skipImmediateHtml;
         if (!skipImmediateHtml) {
             clearProgressiveQueue();
+            clearTypewriter();
             if (previewHtml) previewHtml.innerHTML = processPreviewHtml(data.preview_html || '');
         }
         setWordCount(calcWordCountFromHtml(processPreviewHtml(data.preview_html || '')));
@@ -835,6 +926,7 @@ Activar CRON hourly para rellenar imagenes pendientes
         previewEdited = false;
         setPreviewEditMode(false);
         previewToken = data.preview_token || '';
+        previewPostId = parseInt(data.post_id || '0', 10) || 0;
         if (previewTokenField) previewTokenField.value = previewToken || '';
         renderSeoMeta(data.excerpt || '', data.tags || [], data.focus_keyphrase || '', data.meta_description || '');
         if (Array.isArray(data.images) && data.images.length) {
@@ -885,13 +977,26 @@ Activar CRON hourly para rellenar imagenes pendientes
             clearPreviewOutput({ skipCancel: true });
         });
     }
+    const editBaseUrl = <?php echo wp_json_encode(admin_url('post.php')); ?>;
+    function openInlinePreviewEdit(){
+        if (previewEditPanel) previewEditPanel.style.display = '';
+        if (!previewHtml) return;
+        previewOriginalHtml = previewHtml.innerHTML || '';
+        setPreviewEditMode(true);
+        previewHtml.focus();
+    }
+    function openDraftEditor(){
+        if (!previewPostId) {
+            setPreviewStatus('No hay borrador del preview para editar.', true);
+            openInlinePreviewEdit();
+            return;
+        }
+        const targetUrl = editBaseUrl + '?post=' + previewPostId + '&action=edit';
+        window.location.href = targetUrl;
+    }
     if (previewBtnEdit) {
         previewBtnEdit.addEventListener('click', function(){
-            if (previewEditPanel) previewEditPanel.style.display = '';
-            if (!previewHtml) return;
-            previewOriginalHtml = previewHtml.innerHTML || '';
-            setPreviewEditMode(true);
-            previewHtml.focus();
+            openDraftEditor();
         });
     }
     function openPreviewPanel(){
@@ -977,6 +1082,12 @@ Activar CRON hourly para rellenar imagenes pendientes
             let lastEventAt = Date.now();
             const WATCHDOG_MS = 12000;
             const source = new EventSource(streamUrl);
+            const initialTimeout = setTimeout(function(){
+                if (completed || doneReceived || fatalReceived) return;
+                clearInterval(watchdog);
+                try { source.close(); } catch(e) {}
+                reject(new Error('Timeout inicial de streaming.'));
+            }, 6000);
 
             function readEventData(evt){
                 if (!evt || !evt.data) return {};
@@ -993,6 +1104,7 @@ Activar CRON hourly para rellenar imagenes pendientes
                 }
                 if (Date.now() - lastEventAt > WATCHDOG_MS) {
                     clearInterval(watchdog);
+                    clearTimeout(initialTimeout);
                     try { source.close(); } catch(e) {}
                     reject(new Error('Timeout de streaming.'));
                 }
@@ -1048,6 +1160,7 @@ Activar CRON hourly para rellenar imagenes pendientes
                 completed = true;
                 doneReceived = true;
                 clearInterval(watchdog);
+                clearTimeout(initialTimeout);
                 source.close();
                 if (!data || !data.result) {
                     reject(new Error('Respuesta incompleta de streaming.'));
@@ -1063,6 +1176,7 @@ Activar CRON hourly para rellenar imagenes pendientes
                 completed = true;
                 doneReceived = true;
                 clearInterval(watchdog);
+                clearTimeout(initialTimeout);
                 source.close();
                 if (!data || !data.result) {
                     reject(new Error('Respuesta incompleta de streaming.'));
@@ -1078,6 +1192,7 @@ Activar CRON hourly para rellenar imagenes pendientes
                 completed = true;
                 fatalReceived = true;
                 clearInterval(watchdog);
+                clearTimeout(initialTimeout);
                 source.close();
                 setPhase('ready', true);
                 reject(new Error(data.message || 'No se pudo generar el preview.'));
@@ -1088,6 +1203,7 @@ Activar CRON hourly para rellenar imagenes pendientes
                 completed = true;
                 fatalReceived = true;
                 clearInterval(watchdog);
+                clearTimeout(initialTimeout);
                 source.close();
                 setPhase('ready', true);
                 reject(new Error(data.message || 'No se pudo generar el preview.'));
@@ -1104,6 +1220,7 @@ Activar CRON hourly para rellenar imagenes pendientes
                     }
                     source.close();
                     clearInterval(watchdog);
+                    clearTimeout(initialTimeout);
                     if (hasAnyContent || hadFeaturedEvent) {
                         resolve();
                         return;
@@ -1127,6 +1244,7 @@ Activar CRON hourly para rellenar imagenes pendientes
         ensurePreviewVisible();
         if (previewBtn) previewBtn.disabled = true;
         previewToken = '';
+        previewPostId = 0;
         if (previewTokenField) previewTokenField.value = '';
         renderSeoMeta('', [], '', '');
         setWordCount(0);
@@ -1137,11 +1255,7 @@ Activar CRON hourly para rellenar imagenes pendientes
         clearProgressiveQueue();
         setPreviewEditMode(false);
         if (previewEditPanel) previewEditPanel.style.display = 'none';
-        runPreviewStream(titleVal)
-        .catch((streamErr) => {
-            setPreviewStatus('Streaming inestable, reintentando en modo clasico...', false);
-            return runPreviewClassic(titleVal);
-        })
+        runPreviewClassic(titleVal)
         .catch((classicErr) => {
             const msg = (classicErr && classicErr.message) ? classicErr.message : 'Error al generar preview.';
             setPreviewStatus(msg, true);
