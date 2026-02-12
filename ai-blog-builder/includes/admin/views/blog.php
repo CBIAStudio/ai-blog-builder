@@ -532,9 +532,7 @@ echo '</select>';
                 btn.disabled=false; btn.textContent=old;
             });
     }
-    if(btn){
-        btn.addEventListener('click', startGeneration);
-    }
+    // El click principal se maneja por onclick inline del boton.
     window.cbiaStartGeneration = startGeneration;
 
     const previewOpenBtn = document.getElementById('cbia_btn_open_preview_modal');
@@ -694,7 +692,7 @@ echo '</select>';
         typewriterActive = true;
         let nodeIdx = 0;
         let charIdx = 0;
-        const speed = 14;
+        const speed = 8;
         const tick = function(){
             if (!typewriterActive) return;
             if (nodeIdx >= textNodes.length) {
@@ -720,16 +718,8 @@ echo '</select>';
     }
     function renderInitialImagePlaceholders(){
         if (!previewHtml) return;
-        const count = Number(imagesLimit && imagesLimit.value ? imagesLimit.value : 0);
-        if (!count || count < 1) {
-            previewHtml.innerHTML = '<div class="cbia-preview-img-ph"><span class="dashicons dashicons-format-image" aria-hidden="true"></span><span class="description">Imagenes en proceso...</span></div>';
-            return;
-        }
-        let html = '';
-        for (let i = 0; i < count; i++) {
-            html += '<div class="cbia-preview-img-ph"><span class="dashicons dashicons-format-image" aria-hidden="true"></span><span class="description">Imagen ' + (i + 1) + ' en proceso...</span></div>';
-        }
-        previewHtml.innerHTML = html;
+        // En versión normal solo hay imagen destacada.
+        previewHtml.innerHTML = '<div class="cbia-preview-img-ph"><span class="dashicons dashicons-format-image" aria-hidden="true"></span><span class="description">Imagen destacada en proceso...</span></div>';
     }
     function clearProgressiveQueue(){
         clearTypewriter();
@@ -949,10 +939,7 @@ echo '</select>';
     }
     if (previewEditToggleBtn) {
         previewEditToggleBtn.addEventListener('click', function(){
-            if (!previewHtml) return;
-            previewOriginalHtml = previewHtml.innerHTML || '';
-            setPreviewEditMode(true);
-            previewHtml.focus();
+            openDraftEditor();
         });
     }
     if (previewEditSaveBtn) {
@@ -999,7 +986,6 @@ echo '</select>';
     function openDraftEditor(){
         if (!previewPostId) {
             setPreviewStatus('No hay borrador del preview para editar.', true);
-            openInlinePreviewEdit();
             return;
         }
         const targetUrl = editBaseUrl + '?post=' + previewPostId + '&action=edit';
@@ -1289,9 +1275,7 @@ echo '</select>';
             openPreviewPanel();
         });
     }
-    if (previewBtn) {
-        previewBtn.addEventListener('click', startPreview);
-    }
+    // El click principal se maneja por onclick inline del boton.
     if (previewMetaToggle && previewMetaBody && previewMetaArrow) {
         previewMetaToggle.addEventListener('click', function(){
             const isHidden = window.getComputedStyle(previewMetaBody).display === 'none';

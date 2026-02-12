@@ -19,7 +19,8 @@ if (!class_exists('CBIA_Article_Preview_Service')) {
             $prev_ignore_stop = !empty($GLOBALS['cbia_ignore_stop']);
             $prev_skip_images = !empty($GLOBALS['cbia_preview_skip_images']);
             $GLOBALS['cbia_ignore_stop'] = true;
-            $GLOBALS['cbia_preview_skip_images'] = true;
+            // En preview normal SI generamos imagen destacada.
+            $GLOBALS['cbia_preview_skip_images'] = false;
             try {
             $title = trim((string)($payload['title'] ?? ''));
             if ($title === '') {
