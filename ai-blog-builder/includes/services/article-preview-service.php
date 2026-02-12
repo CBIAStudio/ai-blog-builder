@@ -17,7 +17,9 @@ if (!class_exists('CBIA_Article_Preview_Service')) {
 
         private function generate_internal(array $payload, $emit = null) {
             $prev_ignore_stop = !empty($GLOBALS['cbia_ignore_stop']);
+            $prev_skip_images = !empty($GLOBALS['cbia_preview_skip_images']);
             $GLOBALS['cbia_ignore_stop'] = true;
+            $GLOBALS['cbia_preview_skip_images'] = true;
             try {
             $title = trim((string)($payload['title'] ?? ''));
             if ($title === '') {
@@ -206,6 +208,7 @@ if (!class_exists('CBIA_Article_Preview_Service')) {
                     cbia_log('[PREVIEW] Fin de proceso de preview.', 'INFO');
                 }
                 $GLOBALS['cbia_ignore_stop'] = $prev_ignore_stop;
+                $GLOBALS['cbia_preview_skip_images'] = $prev_skip_images;
             }
         }
 

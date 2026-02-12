@@ -570,6 +570,11 @@ echo '</select>';
     const postLanguage = document.querySelector('select[name="post_language"]');
     let previewToken = '';
     let previewPostId = 0;
+
+    if (previewBtn) {
+        previewBtn.disabled = false;
+        previewBtn.removeAttribute('disabled');
+    }
     let previewOriginalHtml = '';
     let previewEdited = false;
     let progressiveQueue = [];

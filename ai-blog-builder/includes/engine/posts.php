@@ -216,32 +216,37 @@ if (!function_exists('cbia_create_single_blog_post')) {
 
         $GLOBALS['cbia_current_post_title_for_prompt'] = $title;
 
-        // Destacada siempre
-        $featured_desc = $title;
-        $img_descs['featured'] = array(
-            'desc' => $featured_desc,
-            'section' => 'intro',
-            'attach_id' => 0,
-        );
-        $prompt_featured = cbia_build_image_prompt_for_post(0, 'featured', $featured_desc, 0);
-        $alt_featured = cbia_sanitize_alt_from_desc($featured_desc);
-        if ($alt_featured === '') $alt_featured = cbia_sanitize_alt_from_desc($title);
-
-        list($ok, $attach_id, $m, $e) = cbia_generate_image_openai_with_prompt($prompt_featured, 'intro', $title, $alt_featured);
-        $image_calls[] = [
-            'context' => 'blog_image',
-            'section' => 'intro',
-            'model'   => (string)$m,
-            'ok'      => $ok ? 1 : 0,
-            'error'   => (string)($e ?: ''),
-            'attach_id' => (int)$attach_id,
-        ];
-        if ($ok && $attach_id) {
-            $featured_attach_id = (int)$attach_id;
-            $img_descs['featured']['attach_id'] = (int)$featured_attach_id;
-            cbia_log('Imagen destacada OK: attach_id=' . (int)$featured_attach_id, 'INFO');
+        $skip_images = !empty($GLOBALS['cbia_preview_skip_images']);
+        if ($skip_images) {
+            cbia_log("Preview: saltando generacion de imagen destacada para '{$title}'.", 'INFO');
         } else {
-            cbia_log("No se pudo generar destacada para '{$title}': " . ($e ?: ''), 'ERROR');
+            // Destacada siempre
+            $featured_desc = $title;
+            $img_descs['featured'] = array(
+                'desc' => $featured_desc,
+                'section' => 'intro',
+                'attach_id' => 0,
+            );
+            $prompt_featured = cbia_build_image_prompt_for_post(0, 'featured', $featured_desc, 0);
+            $alt_featured = cbia_sanitize_alt_from_desc($featured_desc);
+            if ($alt_featured === '') $alt_featured = cbia_sanitize_alt_from_desc($title);
+
+            list($ok, $attach_id, $m, $e) = cbia_generate_image_openai_with_prompt($prompt_featured, 'intro', $title, $alt_featured);
+            $image_calls[] = [
+                'context' => 'blog_image',
+                'section' => 'intro',
+                'model'   => (string)$m,
+                'ok'      => $ok ? 1 : 0,
+                'error'   => (string)($e ?: ''),
+                'attach_id' => (int)$attach_id,
+            ];
+            if ($ok && $attach_id) {
+                $featured_attach_id = (int)$attach_id;
+                $img_descs['featured']['attach_id'] = (int)$featured_attach_id;
+                cbia_log('Imagen destacada OK: attach_id=' . (int)$featured_attach_id, 'INFO');
+            } else {
+                cbia_log("No se pudo generar destacada para '{$title}': " . ($e ?: ''), 'ERROR');
+            }
         }
 
 		// Limpieza de artefactos antes de guardar
